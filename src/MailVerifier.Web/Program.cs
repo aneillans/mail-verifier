@@ -5,12 +5,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using MailVerifier.Web.Data;
+using MailVerifier.Web.Models;
 using MailVerifier.Web.Security;
 using MailVerifier.Web.Services;
 using System.Security.Claims;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+
+VerificationResult.ConfigureAdditionalCommonMailboxNames(
+    builder.Configuration.GetSection("Verification:AdditionalCommonMailboxNames").Get<string[]>());
 
 // Add Razor Pages
 builder.Services.AddRazorPages(options =>
@@ -475,6 +479,8 @@ app.MapGet("/api/jobs/{id:int}/progress", async (int id, AppDbContext db, HttpCo
             r.DomainExists,
             r.HasMxRecords,
             r.MailboxExists,
+            r.IsCommonMailbox,
+            r.IsAtRisk,
             r.IsRetryable,
             r.IsVerified,
             r.ErrorMessage,

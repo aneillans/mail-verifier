@@ -114,7 +114,11 @@
             }
             @if (Model.Job.Status == "Completed")
             {
-                <form method="post" style="display:inline-block;">
+                <form method="post" class="d-inline-flex align-items-center gap-2">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="excludeAtRisk" value="true" id="excludeAtRisk" />
+                        <label class="form-check-label small" for="excludeAtRisk">Exclude "At risk" common mailboxes</label>
+                    </div>
                     <button type="submit" asp-page-handler="DownloadCsv" asp-route-id="@Model.Job.Id"
                             class="btn btn-outline-success">
                         <i class="bi bi-download me-2"></i>Download CSV
@@ -268,6 +272,10 @@
                                 {
                                     <span class="badge bg-info">🔄 Retested</span>
                                 }
+                                else if (result.IsAtRisk)
+                                {
+                                    <span class="badge bg-warning text-dark">⚠ At risk</span>
+                                }
                                 else if (result.IsVerified)
                                 {
                                     <span class="badge bg-success">✓ Verified</span>
@@ -350,6 +358,10 @@
         }
 
         function statusBadge(r) {
+            if (r.isAtRisk) {
+                return '<span class="badge bg-warning text-dark">⚠ At risk</span>';
+            }
+
             if (r.isVerified) {
                 return '<span class="badge bg-success">✓ Verified</span>';
             }

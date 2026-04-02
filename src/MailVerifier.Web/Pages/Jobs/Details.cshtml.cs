@@ -72,7 +72,7 @@ public class JobDetailsModel : PageModel
         return Page();
     }
 
-    public async Task<IActionResult> OnPostDownloadCsvAsync(int id)
+    public async Task<IActionResult> OnPostDownloadCsvAsync(int id, bool excludeAtRisk = false)
     {
         var query = _db.VerificationJobs
             .Include(j => j.Results)
@@ -93,11 +93,15 @@ public class JobDetailsModel : PageModel
             return NotFound();
 
         var csv = new StringBuilder();
-        csv.AppendLine("Email,DomainExists,HasMxRecords,MailboxExists,Verified");
+        csv.AppendLine("Email,DomainExists,HasMxRecords,MailboxExists,Verified,CommonMailbox,AtRisk");
 
-        foreach (var result in Job.Results.OrderBy(r => r.EmailAddress))
+        var exportResults = Job.Results
+            .Where(r => !excludeAtRisk || !r.IsAtRisk)
+            .OrderBy(r => r.EmailAddress);
+
+        foreach (var result in exportResults)
         {
-            csv.AppendLine($"\"{result.EmailAddress}\",{(result.DomainExists ? "true" : "false")},{(result.HasMxRecords ? "true" : "false")},{(result.MailboxExists ? "true" : "false")},{(result.IsVerified ? "true" : "false")}");
+            csv.AppendLine($"\"{result.EmailAddress}\",{(result.DomainExists ? "true" : "false")},{(result.HasMxRecords ? "true" : "false")},{(result.MailboxExists ? "true" : "false")},{(result.IsVerified ? "true" : "false")},{(result.IsCommonMailbox ? "true" : "false")},{(result.IsAtRisk ? "true" : "false")}");
         }
 
         var fileName = $"job-{id}-results-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";

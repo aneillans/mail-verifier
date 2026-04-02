@@ -48,6 +48,12 @@
                     </select>
                     <div class="form-text">Used when your template does not include <code>%verified%</code>.</div>
                 </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="excludeAtRisk" />
+                    <label class="form-check-label" for="excludeAtRisk">
+                        Exclude "At risk" common mailboxes
+                    </label>
+                </div>
                 <div class="d-flex align-items-center gap-3 mb-3">
                     <button type="button" class="btn btn-primary" id="btnGenerateSql">
                         <i class="bi bi-code-slash me-2"></i>Generate SQL
@@ -81,6 +87,7 @@
     (function () {
         const emailRows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.EmailRows));
         const includeModeSelect = document.getElementById('includeMode');
+        const excludeAtRiskCheckbox = document.getElementById('excludeAtRisk');
         const rowCountText = document.getElementById('rowCountText');
 
         function getEmailAddress(row) {
@@ -92,22 +99,31 @@
             return Boolean(value);
         }
 
+        function getAtRiskFlag(row) {
+            const value = row.IsAtRisk ?? row.isAtRisk;
+            return Boolean(value);
+        }
+
         function getFilteredRows(template) {
             const hasVerifiedPlaceholder = /%verified%/i.test(template);
+            const rowsAfterRiskFilter = emailRows.filter(function (row) {
+                return !(excludeAtRiskCheckbox.checked && getAtRiskFlag(row));
+            });
+
             if (hasVerifiedPlaceholder) {
-                return emailRows;
+                return rowsAfterRiskFilter;
             }
 
             const mode = includeModeSelect.value;
             if (mode === 'verified') {
-                return emailRows.filter(function (row) { return getVerifiedFlag(row); });
+                return rowsAfterRiskFilter.filter(function (row) { return getVerifiedFlag(row); });
             }
 
             if (mode === 'unverified') {
-                return emailRows.filter(function (row) { return !getVerifiedFlag(row); });
+                return rowsAfterRiskFilter.filter(function (row) { return !getVerifiedFlag(row); });
             }
 
-            return emailRows;
+            return rowsAfterRiskFilter;
         }
 
         function updateRowCountHint() {
@@ -122,6 +138,7 @@
 
         document.getElementById('sqlTemplate').addEventListener('input', updateRowCountHint);
         includeModeSelect.addEventListener('change', updateRowCountHint);
+        excludeAtRiskCheckbox.addEventListener('change', updateRowCountHint);
         updateRowCountHint();
 
         document.getElementById('btnGenerateSql').addEventListener('click', function () {
