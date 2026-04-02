@@ -16,6 +16,8 @@ public class JobSqlScriptModel : PageModel
         public string EmailAddress { get; set; } = string.Empty;
 
         public bool IsVerified { get; set; }
+
+        public bool IsAtRisk { get; set; }
     }
 
     public VerificationJob? Job { get; set; }
@@ -58,7 +60,8 @@ public class JobSqlScriptModel : PageModel
             .Select(r => new SqlEmailRow
             {
                 EmailAddress = r.EmailAddress,
-                IsVerified = r.IsVerified
+                IsVerified = r.IsVerified,
+                IsAtRisk = r.IsAtRisk
             })
             .ToList();
 
