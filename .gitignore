@@ -1,0 +1,14 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# User files
+**/*.user
+**/.vs/
+
+# Node
+**/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

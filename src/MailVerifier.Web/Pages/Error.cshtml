@@ -1,0 +1,15 @@
+@page
+@model MailVerifier.Web.Pages.ErrorModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Error";
+}
+
+<div class="container py-5 text-center">
+    <h1 class="text-danger">An error occurred</h1>
+    @if (Model.RequestId != null)
+    {
+        <p class="text-muted">Request ID: <code>@Model.RequestId</code></p>
+    }
+    <a asp-page="/Index" class="btn btn-primary mt-3">Go Home</a>
+</div>

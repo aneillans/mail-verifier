@@ -1,0 +1,53 @@
+@page
+@model ConfigurationModel
+@{
+    ViewData["Title"] = "Configuration";
+    Layout = "_Layout";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h1>System Configuration</h1>
+            <p class="text-muted">Non-sensitive configuration variables (Admin only)</p>
+            <hr />
+
+            @foreach (var configSection in Model.DisplayConfig)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">@configSection.Key</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <tbody>
+                                    @foreach (var item in (Dictionary<string, string>)configSection.Value)
+                                    {
+                                        <tr>
+                                            <td style="width: 30%; font-weight: 500;">@item.Key</td>
+                                            <td>
+                                                @if (string.IsNullOrEmpty(item.Value) || item.Value == "N/A")
+                                                {
+                                                    <span class="text-muted">@item.Value</span>
+                                                }
+                                                else
+                                                {
+                                                    <code>@item.Value</code>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="alert alert-info" role="alert">
+                <strong>Note:</strong> Sensitive values (passwords, secrets, tokens) are not displayed here. To modify configuration, update environment variables or appsettings files and redeploy.
+            </div>
+        </div>
+    </div>
+</div>

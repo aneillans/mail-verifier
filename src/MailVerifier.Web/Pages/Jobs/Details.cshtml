@@ -1,0 +1,481 @@
+@page "{id:int}"
+@model MailVerifier.Web.Pages.Jobs.JobDetailsModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = $"Job #{Model.Job?.Id} Details";
+    var isLive = Model.Job?.Status is "Pending" or "Processing";
+}
+
+<div class="container py-4">
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["InfoMessage"] != null)
+    {
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            @TempData["InfoMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (Model.Job == null)
+    {
+        <div class="alert alert-warning">Job not found.</div>
+        <a asp-page="/Jobs/Index" class="btn btn-secondary">Back to Jobs</a>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1>Job #@Model.Job.Id Results</h1>
+                @if (!string.IsNullOrWhiteSpace(Model.Job.Name))
+                {
+                    <p class="text-muted mb-0">@Model.Job.Name</p>
+                }
+            </div>
+            <a asp-page="/Jobs/Index" class="btn btn-outline-secondary">← Back to Jobs</a>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Status</h5>
+                        @{
+                            var badgeClass = Model.Job.Status switch
+                            {
+                                "Completed" => "bg-success",
+                                "Processing" => "bg-warning text-dark",
+                                "Pending"    => "bg-secondary",
+                                "Failed"     => "bg-danger",
+                                "Stopped"    => "bg-secondary",
+                                _            => "bg-secondary"
+                            };
+                        }
+                        <span id="status-badge" class="badge @badgeClass fs-6">@Model.Job.Status</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Total</h5>
+                        <p class="display-6">@Model.Job.TotalEmails</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Valid Mailboxes</h5>
+                        <p id="valid-count" class="display-6 text-success">@Model.Job.Results.Count(r => r.MailboxExists)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Created</h5>
+                        <p>@Model.Job.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (isLive)
+        {
+            <div class="mb-4">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="small text-muted">Processing in batches of 10&hellip;</span>
+                    <span id="progress-label" class="small text-muted">
+                        @Model.Job.ProcessedEmails / @Model.Job.TotalEmails
+                    </span>
+                </div>
+                <div class="progress" style="height:20px">
+                    <div id="progress-bar"
+                         class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                         role="progressbar"
+                         style="width:@(Model.Job.TotalEmails > 0 ? (Model.Job.ProcessedEmails * 100 / Model.Job.TotalEmails) : 0)%">
+                    </div>
+                </div>
+                <div class="mt-2 d-flex justify-content-between">
+                    <span class="small">Estimated time remaining:</span>
+                    <span id="eta-display" class="small fw-bold">@Model.EstimatedTimeRemaining</span>
+                </div>
+            </div>
+        }
+
+        <div class="mb-4">
+            @{
+                var timedOutCount = Model.Job.Results.Count(r => !string.IsNullOrEmpty(r.ErrorMessage));
+            }
+            @if (Model.Job.Status == "Completed")
+            {
+                <form method="post" style="display:inline-block;">
+                    <button type="submit" asp-page-handler="DownloadCsv" asp-route-id="@Model.Job.Id"
+                            class="btn btn-outline-success">
+                        <i class="bi bi-download me-2"></i>Download CSV
+                    </button>
+                </form>
+                <a asp-page="/Jobs/SqlScript" asp-route-id="@Model.Job.Id" class="btn btn-outline-success">
+                    <i class="bi bi-code-slash me-2"></i>Generate SQL
+                </a>
+                @if (timedOutCount > 0)
+                {
+                    <form method="post" style="display:inline-block;">
+                        <button type="submit" asp-page-handler="RerunTimeouts" asp-route-id="@Model.Job.Id"
+                                class="btn btn-outline-warning"
+                                onclick="return confirm('Rerun @timedOutCount timed-out email(s)?');">
+                            <i class="bi bi-arrow-clockwise me-2"></i>Rerun @timedOutCount Timeout(s)
+                        </button>
+                    </form>
+                }
+                @if (Model.Job.Results.Count > 0)
+                {
+                    <form method="post" style="display:inline-block;">
+                        <button type="submit" asp-page-handler="DeleteResults" asp-route-id="@Model.Job.Id"
+                                class="btn btn-outline-danger"
+                                onclick="return confirm('Delete all @Model.Job.Results.Count result(s)? This cannot be undone.');">
+                            <i class="bi bi-trash me-2"></i>Delete Results
+                        </button>
+                    </form>
+                }
+            }
+            @if (Model.Job.Status is "Pending" or "Processing")
+            {
+                <form method="post" style="display:inline-block;">
+                    <button type="submit" asp-page-handler="StopJob" asp-route-id="@Model.Job.Id"
+                            class="btn btn-outline-danger"
+                            onclick="return confirm('Stop this job?');">
+                        <i class="bi bi-hand-thumbs-down me-2"></i>Stop Job
+                    </button>
+                </form>
+            }
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Email</th>
+                        <th>Domain Exists</th>
+                        <th>MX Records</th>
+                        <th>Mailbox Exists</th>
+                        <th>Status</th>
+                        <th>Error</th>
+                        <th>Verified At</th>
+                        <th>SMTP Log</th>
+                    </tr>
+                </thead>
+                <tbody id="results-tbody">
+                    @foreach (var result in Model.Job.Results.OrderBy(r => r.EmailAddress))
+                    {
+                        <tr data-result-id="@result.Id">
+                            <td>@result.EmailAddress</td>
+                            <td>
+                                @if (result.IsRetested && result.OriginalDomainExists.HasValue)
+                                {
+                                    <div class="small text-muted">
+                                        @if (result.OriginalDomainExists.Value)
+                                        {
+                                            <span class="badge bg-success">✓ Yes</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">✗ No</span>
+                                        }
+                                        <small>(1st)</small>
+                                    </div>
+                                }
+                                @if (result.DomainExists)
+                                {
+                                    <span class="badge bg-success">✓ Yes</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">✗ No</span>
+                                }
+                                @if (result.IsRetested)
+                                {
+                                    <small class="text-muted">(retest)</small>
+                                }
+                            </td>
+                            <td>
+                                @if (result.IsRetested && result.OriginalHasMxRecords.HasValue)
+                                {
+                                    <div class="small text-muted">
+                                        @if (result.OriginalHasMxRecords.Value)
+                                        {
+                                            <span class="badge bg-success">✓ Yes</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">✗ No</span>
+                                        }
+                                        <small>(1st)</small>
+                                    </div>
+                                }
+                                @if (result.HasMxRecords)
+                                {
+                                    <span class="badge bg-success">✓ Yes</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">✗ No</span>
+                                }
+                                @if (result.IsRetested)
+                                {
+                                    <small class="text-muted">(retest)</small>
+                                }
+                            </td>
+                            <td>
+                                @if (result.IsRetested && result.OriginalMailboxExists.HasValue)
+                                {
+                                    <div class="small text-muted">
+                                        @if (result.OriginalMailboxExists.Value)
+                                        {
+                                            <span class="badge bg-success">✓ Yes</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">✗ No</span>
+                                        }
+                                        <small>(1st)</small>
+                                    </div>
+                                }
+                                @if (result.MailboxExists)
+                                {
+                                    <span class="badge bg-success">✓ Yes</span>
+                                }
+                                else if (result.IsRetryable)
+                                {
+                                    <span class="badge bg-warning text-dark">? Unknown</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">✗ No</span>
+                                }
+                                @if (result.IsRetested)
+                                {
+                                    <small class="text-muted">(retest)</small>
+                                }
+                            </td>
+                            <td>
+                                @if (result.IsRetested)
+                                {
+                                    <span class="badge bg-info">🔄 Retested</span>
+                                }
+                                else if (result.IsVerified)
+                                {
+                                    <span class="badge bg-success">✓ Verified</span>
+                                }
+                                else if (result.IsRetryable)
+                                {
+                                    <span class="badge bg-warning text-dark">⟳ Retryable</span>
+                                }
+                                else if (result.IsInvalidMailbox)
+                                {
+                                    <span class="badge bg-danger">✗ Invalid Mailbox</span>
+                                }
+                                else if (!string.IsNullOrEmpty(result.ErrorMessage))
+                                {
+                                    <span class="badge bg-danger">⚠ Failed</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">• Unverified</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(result.ErrorMessage))
+                                {
+                                    <span class="text-danger small">@result.ErrorMessage</span>
+                                }
+                            </td>
+                            <td class="small">@result.VerifiedAt.ToLocalTime().ToString("HH:mm:ss")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(result.SmtpLog))
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#smtp-@result.Id">
+                                        Show Log
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrEmpty(result.SmtpLog))
+                        {
+                            <tr class="collapse" id="smtp-@result.Id">
+                                <td colspan="7">
+                                    <pre class="bg-dark text-light p-3 rounded small">@result.SmtpLog</pre>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (isLive)
+{
+    <script>
+    (function () {
+        const POLL_INTERVAL_MS = 2000;
+        const jobId = @Model.Job!.Id;
+        const total  = @Model.Job.TotalEmails;
+        const renderedIds = new Set(
+            Array.from(document.querySelectorAll('#results-tbody tr[data-result-id]'))
+                 .map(r => parseInt(r.dataset.resultId, 10))
+        );
+
+        function badge(yes) {
+            return yes
+                ? '<span class="badge bg-success">✓ Yes</span>'
+                : '<span class="badge bg-danger">✗ No</span>';
+        }
+
+        function mailboxBadge(r) {
+            if (r.isRetryable) {
+                return '<span class="badge bg-warning text-dark">? Unknown</span>';
+            }
+
+            return badge(r.mailboxExists);
+        }
+
+        function statusBadge(r) {
+            if (r.isVerified) {
+                return '<span class="badge bg-success">✓ Verified</span>';
+            }
+
+            if (r.isRetryable) {
+                return '<span class="badge bg-warning text-dark">⟳ Retryable</span>';
+            }
+
+            if (r.domainExists && r.hasMxRecords && !r.mailboxExists && !r.errorMessage) {
+                return '<span class="badge bg-danger">✗ Invalid Mailbox</span>';
+            }
+
+            if (r.errorMessage) {
+                return '<span class="badge bg-danger">⚠ Failed</span>';
+            }
+
+            return '<span class="badge bg-secondary">• Unverified</span>';
+        }
+
+        function appendResult(r) {
+            if (renderedIds.has(r.id)) return;
+            renderedIds.add(r.id);
+
+            const tbody = document.getElementById('results-tbody');
+
+            const tr = document.createElement('tr');
+            tr.dataset.resultId = r.id;
+            tr.innerHTML = `
+                <td>${escHtml(r.emailAddress)}</td>
+                <td>${badge(r.domainExists)}</td>
+                <td>${badge(r.hasMxRecords)}</td>
+                <td>${mailboxBadge(r)}</td>
+                <td>${statusBadge(r)}</td>
+                <td>${r.errorMessage ? '<span class="text-danger small">' + escHtml(r.errorMessage) + '</span>' : ''}</td>
+                <td class="small">${escHtml(r.verifiedAt)}</td>
+                <td>${r.smtpLog ? '<button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#smtp-live-' + r.id + '">Show Log</button>' : ''}</td>`;
+            tbody.appendChild(tr);
+
+            if (r.smtpLog) {
+                const logRow = document.createElement('tr');
+                logRow.className = 'collapse';
+                logRow.id = 'smtp-live-' + r.id;
+                logRow.innerHTML = '<td colspan="8"><pre class="bg-dark text-light p-3 rounded small">' + escHtml(r.smtpLog) + '</pre></td>';
+                tbody.appendChild(logRow);
+            }
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function formatTimeRemaining(seconds) {
+            if (seconds <= 0) return '—';
+            if (seconds >= 3600) {
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                return `${hours}h ${mins}m`;
+            }
+            if (seconds >= 60) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}m ${secs}s`;
+            }
+            return `${Math.floor(seconds)}s`;
+        }
+
+        function updateProgress(processed, status, createdAtUtc) {
+            const pct = total > 0 ? Math.round(processed * 100 / total) : 0;
+            document.getElementById('progress-bar').style.width = pct + '%';
+            document.getElementById('progress-label').textContent = processed + ' / ' + total;
+
+            const badge = document.getElementById('status-badge');
+            badge.textContent = status;
+            badge.className = 'badge fs-6 ' + ({
+                Completed: 'bg-success',
+                Processing: 'bg-warning text-dark',
+                Pending:    'bg-secondary',
+                Failed:     'bg-danger'
+            }[status] ?? 'bg-secondary');
+
+            if (status === 'Completed' || status === 'Failed') {
+                const bar = document.getElementById('progress-bar');
+                bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+                bar.classList.add(status === 'Completed' ? 'bg-success' : 'bg-danger');
+            }
+
+            // Update ETA if job is still processing
+            if ((status === 'Pending' || status === 'Processing') && processed > 0 && createdAtUtc) {
+                const createdAtMs = createdAtUtc; // Already in milliseconds since Unix epoch
+                const nowMs = Date.now();
+                const elapsedSeconds = (nowMs - createdAtMs) / 1000;
+                const averageSecondsPerEmail = elapsedSeconds / processed;
+                const remainingEmails = total - processed;
+                const estimatedSecondsRemaining = averageSecondsPerEmail * remainingEmails;
+                
+                const etaDisplay = document.getElementById('eta-display');
+                if (etaDisplay) {
+                    etaDisplay.textContent = formatTimeRemaining(estimatedSecondsRemaining);
+                }
+            }
+        }
+
+        async function poll() {
+            try {
+                const resp = await fetch('/api/jobs/' + jobId + '/progress');
+                if (!resp.ok) return;
+                const data = await resp.json();
+
+                updateProgress(data.processedEmails, data.status, data.createdAtUtc);
+
+                (data.results ?? []).forEach(appendResult);
+
+                const validCount = (data.results ?? []).filter(r => r.mailboxExists).length;
+                document.getElementById('valid-count').textContent = validCount;
+
+                if (data.status !== 'Pending' && data.status !== 'Processing') {
+                    clearInterval(pollTimer);
+                }
+            } catch (e) {
+                // network hiccup — keep retrying
+            }
+        }
+
+        const pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+        poll(); // immediate first fetch
+    })();
+    </script>
+}

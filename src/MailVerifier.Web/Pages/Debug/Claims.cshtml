@@ -1,0 +1,113 @@
+@page
+@model MailVerifier.Web.Pages.Debug.ClaimsModel
+@{
+    ViewData["Title"] = "Claims Debug";
+    Layout = "_Layout";
+}
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1">Claims Debug</h1>
+            <p class="text-muted mb-0">Inspect claims and role mappings for the current signed-in user.</p>
+        </div>
+        <a class="btn btn-outline-secondary" asp-page="/Index">Back to Home</a>
+    </div>
+
+    <div class="alert alert-warning mt-3" role="alert">
+        This page is for troubleshooting only and displays claim values exactly as received.
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Identity Summary</div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">NameIdentifier</dt>
+                        <dd class="col-sm-8"><code>@(Model.NameIdentifier ?? "(missing)")</code></dd>
+                        <dt class="col-sm-4">sub</dt>
+                        <dd class="col-sm-8"><code>@(Model.Subject ?? "(missing)")</code></dd>
+                        <dt class="col-sm-4">IsInRole("admin")</dt>
+                        <dd class="col-sm-8">@(Model.IsInRoleAdminLower ? "true" : "false")</dd>
+                        <dt class="col-sm-4">IsInRole("Admin")</dt>
+                        <dd class="col-sm-8">@(Model.IsInRoleAdminUpper ? "true" : "false")</dd>
+                        <dt class="col-sm-4">UserAccess.IsAdmin</dt>
+                        <dd class="col-sm-8">@(Model.IsAdminFromHelper ? "true" : "false")</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Role Sources</div>
+                <div class="card-body">
+                    <h2 class="h6">Standard Role Claims</h2>
+                    @if (Model.StandardRoleClaims.Count == 0)
+                    {
+                        <p class="text-muted mb-2">No role/roles/ClaimTypes.Role claims found.</p>
+                    }
+                    else
+                    {
+                        <p class="mb-2">@string.Join(", ", Model.StandardRoleClaims)</p>
+                    }
+
+                    <h2 class="h6">realm_access.roles</h2>
+                    @if (Model.RealmRoles.Count == 0)
+                    {
+                        <p class="text-muted mb-2">No realm roles found.</p>
+                    }
+                    else
+                    {
+                        <p class="mb-2">@string.Join(", ", Model.RealmRoles)</p>
+                    }
+
+                    <h2 class="h6">resource_access.&lt;client&gt;.roles</h2>
+                    @if (Model.ResourceRoles.Count == 0)
+                    {
+                        <p class="text-muted mb-0">No client roles found.</p>
+                    }
+                    else
+                    {
+                        <ul class="mb-0">
+                            @foreach (var client in Model.ResourceRoles)
+                            {
+                                <li><strong>@client.Key:</strong> @string.Join(", ", client.Value)</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header fw-semibold">Raw Claims (@Model.Claims.Count)</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 220px;">Type</th>
+                            <th>Value</th>
+                            <th style="min-width: 160px;">Issuer</th>
+                            <th style="min-width: 160px;">ValueType</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var claim in Model.Claims)
+                    {
+                        <tr>
+                            <td><code>@claim.Type</code></td>
+                            <td><code>@claim.Value</code></td>
+                            <td><code>@claim.Issuer</code></td>
+                            <td><code>@claim.ValueType</code></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,46 @@
+@page
+@model MailVerifier.Web.Pages.UploadModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Upload CSV";
+}
+
+<div class="container py-4">
+    <h1>Upload Email List</h1>
+    <p class="text-muted">Upload a CSV file containing email addresses to verify. One email per line, or use a column named "email".</p>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger">@Model.ErrorMessage</div>
+    }
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label for="jobName" class="form-label fw-bold">Job Name <span class="text-muted fw-normal">(optional)</span></label>
+                    <input type="text" class="form-control" id="jobName" name="jobName" maxlength="200" placeholder="e.g. Q2 Campaign List" />
+                </div>
+                <div class="mb-3">
+                    <label for="csvFile" class="form-label fw-bold">CSV File</label>
+                    <input type="file" class="form-control" id="csvFile" name="csvFile" accept=".csv,.txt" required />
+                    <div class="form-text">Accepted formats: .csv, .txt — One email per line or CSV with "email" header column.</div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <span class="spinner-border spinner-border-sm d-none" id="spinner"></span>
+                    Upload &amp; Verify
+                </button>
+                <a asp-page="/Jobs/Index" class="btn btn-outline-secondary ms-2">View Jobs</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelector('form').addEventListener('submit', function () {
+            document.getElementById('spinner').classList.remove('d-none');
+        });
+    </script>
+}

@@ -1,0 +1,18 @@
+services:
+  mailverifier:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data:Z
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - OpenIdConnect__Authority=${OIDC_AUTHORITY:-https://auth.neillans.co.uk/realms/MailCheck}
+      - OpenIdConnect__ClientId=${OIDC_CLIENT_ID:-mail-verifier}
+      - OpenIdConnect__ClientSecret=${OIDC_CLIENT_SECRET:-your-client-secret}
+      - OpenIdConnect__CallbackPath=${OIDC_CALLBACK_PATH:-/signin-oidc}
+      - OpenIdConnect__SignedOutCallbackPath=${OIDC_SIGNED_OUT_CALLBACK_PATH:-/signout-callback-oidc}
+      - OpenIdConnect__CallbackScheme=${OIDC_CALLBACK_SCHEME:-http}
+      - OpenIdConnect__CallbackHost=${OIDC_CALLBACK_HOST:-localhost:8080}
+      - Smtp__EhloHost=${SMTP_EHLO_HOST:-mailverifier.local}
+    restart: on-failure

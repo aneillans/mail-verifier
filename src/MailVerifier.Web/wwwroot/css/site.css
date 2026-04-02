@@ -1,0 +1,21 @@
+html {
+    font-size: 14px;
+    position: relative;
+    min-height: 100%;
+}
+
+body {
+    margin-bottom: 60px;
+}
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+}
+
+pre.smtp-log {
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: 0.8rem;
+}

@@ -1,0 +1,53 @@
+@page
+@model MailVerifier.Web.Pages.IndexModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Home";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <h1 class="display-4 mb-4">
+                <i class="bi bi-envelope-check"></i> Mail Verifier
+            </h1>
+            <p class="lead mb-5">
+                Upload a CSV list of email addresses to verify DNS records, MX records, and mailbox existence via SMTP.
+            </p>
+            <div class="d-flex justify-content-center gap-3">
+                <a asp-page="/Upload" class="btn btn-primary btn-lg">
+                    <i class="bi bi-upload"></i> Upload CSV
+                </a>
+                <a asp-page="/Jobs/Index" class="btn btn-outline-secondary btn-lg">
+                    <i class="bi bi-list-check"></i> My Jobs
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <h5 class="card-title">DNS Lookup</h5>
+                    <p class="card-text">Checks if the domain has A/CNAME records and resolves correctly.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <h5 class="card-title">MX Records</h5>
+                    <p class="card-text">Verifies that the domain has mail exchanger records configured.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <h5 class="card-title">SMTP Verification</h5>
+                    <p class="card-text">Connects to the mail server and checks if the mailbox accepts mail.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

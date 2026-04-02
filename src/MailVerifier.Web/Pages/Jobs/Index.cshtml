@@ -1,0 +1,110 @@
+@page
+@model MailVerifier.Web.Pages.Jobs.JobsIndexModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Verification Jobs";
+}
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Verification Jobs</h1>
+        <a asp-page="/Upload" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> New Job
+        </a>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            @Model.Message
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!Model.Jobs.Any())
+    {
+        <div class="alert alert-info">
+            No verification jobs found. <a asp-page="/Upload">Upload a CSV</a> to get started.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Created</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                        <th>Valid / Total</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in Model.Jobs)
+                    {
+                        <tr>
+                            <td>#@job.Id</td>
+                            <td>@(job.Name ?? "—")</td>
+                            <td>@job.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                @{
+                                    var badgeClass = job.Status switch
+                                    {
+                                        "Completed" => "bg-success",
+                                        "Processing" => "bg-warning text-dark",
+                                        "Failed" => "bg-danger",
+                                        _ => "bg-secondary"
+                                    };
+                                }
+                                <span class="badge @badgeClass">@job.Status</span>
+                            </td>
+                            <td>
+                                <div class="progress" style="min-width: 100px">
+                                    @{
+                                        var pct = job.TotalEmails > 0 ? (int)(job.ProcessedEmails * 100.0 / job.TotalEmails) : 0;
+                                    }
+                                    <div class="progress-bar" style="width: @pct%">@pct%</div>
+                                </div>
+                            </td>
+                            <td>@job.Results.Count(r => r.MailboxExists) / @job.TotalEmails</td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a asp-page="/Jobs/Details" asp-route-id="@job.Id" class="btn btn-outline-primary">
+                                        View Details
+                                    </a>
+                                    @if (job.Status == "Completed")
+                                    {
+                                        <a asp-page="/Jobs/SqlScript" asp-route-id="@job.Id" class="btn btn-outline-success">
+                                            Generate SQL
+                                        </a>
+                                    }
+                                    @if (job.Results.Count == 0)
+                                    {
+                                        <form method="post" asp-page-handler="RestartJob" style="display: inline;">
+                                            <input type="hidden" name="id" value="@job.Id" />
+                                            <button type="submit" class="btn btn-outline-warning" onclick="return confirm('Are you sure you want to restart Job #@job.Id?');">
+                                                <i class="bi bi-arrow-clockwise"></i> Restart
+                                            </button>
+                                        </form>
+                                    }
+                                    @if (job.Status == "Stopped")
+                                    {
+                                        <form method="post" asp-page-handler="DeleteJob" style="display: inline;">
+                                            <input type="hidden" name="id" value="@job.Id" />
+                                            <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Are you sure you want to delete Job #@job.Id? This cannot be undone.');">
+                                                <i class="bi bi-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
