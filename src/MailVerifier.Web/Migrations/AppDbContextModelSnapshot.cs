@@ -65,6 +65,10 @@ namespace MailVerifier.Web.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UploadedByUser", "CreatedAt");
+
                     b.ToTable("VerificationJobs");
                 });
 

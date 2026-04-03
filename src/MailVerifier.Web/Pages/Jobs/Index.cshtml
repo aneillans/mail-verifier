@@ -77,7 +77,7 @@
                                     <div class="progress-bar" style="width: @pct%">@pct%</div>
                                 </div>
                             </td>
-                            <td>@job.Results.Count(r => r.MailboxExists) / @job.TotalEmails</td>
+                            <td>@job.ValidEmails / @job.TotalEmails</td>
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
                                     <a asp-page="/Jobs/Details" asp-route-id="@job.Id" class="btn btn-outline-primary">
@@ -89,7 +89,7 @@
                                             Generate SQL
                                         </a>
                                     }
-                                    @if (job.Results.Count == 0)
+                                    @if (job.ResultCount == 0)
                                     {
                                         <form method="post" asp-page-handler="RestartJob" style="display: inline;">
                                             <input type="hidden" name="id" value="@job.Id" />

@@ -20,6 +20,8 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UploadedByUser).IsRequired();
             entity.Property(e => e.Status).IsRequired();
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.UploadedByUser, e.CreatedAt });
             entity.HasMany(e => e.Results)
                   .WithOne(r => r.Job)
                   .HasForeignKey(r => r.JobId)
