@@ -35,6 +35,10 @@
                     <tr>
                         <th>ID</th>
                         <th>Name</th>
+                        @if (Model.IsAdminUser)
+                        {
+                            <th>Scheduled By</th>
+                        }
                         <th>Created</th>
                         <th>Status</th>
                         <th>Progress</th>
@@ -48,6 +52,10 @@
                         <tr>
                             <td>#@job.Id</td>
                             <td>@(job.Name ?? "—")</td>
+                            @if (Model.IsAdminUser)
+                            {
+                                <td>@job.UploadedByUser</td>
+                            }
                             <td>@job.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                             <td>
                                 @{
