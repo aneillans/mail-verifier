@@ -13,8 +13,21 @@ public class JobsIndexModel : PageModel
     private readonly AppDbContext _db;
     private readonly VerificationQueueService _queue;
 
-    public List<VerificationJob> Jobs { get; set; } = new();
+    public List<JobListItem> Jobs { get; set; } = new();
     public bool IsAdminUser { get; private set; }
+
+    public sealed class JobListItem
+    {
+        public int Id { get; init; }
+        public string? Name { get; init; }
+        public string UploadedByUser { get; init; } = string.Empty;
+        public DateTime CreatedAt { get; init; }
+        public int TotalEmails { get; init; }
+        public int ProcessedEmails { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public int ValidEmails { get; init; }
+        public int ResultCount { get; init; }
+    }
 
     [TempData]
     public string? Message { get; set; }
@@ -30,7 +43,7 @@ public class JobsIndexModel : PageModel
         IsAdminUser = UserAccess.IsAdmin(User);
 
         var query = _db.VerificationJobs
-            .Include(j => j.Results)
+            .AsNoTracking()
             .AsQueryable();
 
         if (!IsAdminUser)
@@ -38,7 +51,7 @@ public class JobsIndexModel : PageModel
             var userId = UserAccess.GetUserId(User);
             if (string.IsNullOrWhiteSpace(userId))
             {
-                Jobs = new List<VerificationJob>();
+                Jobs = new List<JobListItem>();
                 return;
             }
 
@@ -47,6 +60,18 @@ public class JobsIndexModel : PageModel
 
         Jobs = await query
             .OrderByDescending(j => j.CreatedAt)
+            .Select(j => new JobListItem
+            {
+                Id = j.Id,
+                Name = j.Name,
+                UploadedByUser = j.UploadedByUser,
+                CreatedAt = j.CreatedAt,
+                TotalEmails = j.TotalEmails,
+                ProcessedEmails = j.ProcessedEmails,
+                Status = j.Status,
+                ValidEmails = j.Results.Count(r => r.MailboxExists),
+                ResultCount = j.Results.Count()
+            })
             .ToListAsync();
     }
 
