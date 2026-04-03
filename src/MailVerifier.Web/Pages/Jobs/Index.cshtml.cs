@@ -14,6 +14,7 @@ public class JobsIndexModel : PageModel
     private readonly VerificationQueueService _queue;
 
     public List<VerificationJob> Jobs { get; set; } = new();
+    public bool IsAdminUser { get; private set; }
 
     [TempData]
     public string? Message { get; set; }
@@ -26,11 +27,13 @@ public class JobsIndexModel : PageModel
 
     public async Task OnGetAsync()
     {
+        IsAdminUser = UserAccess.IsAdmin(User);
+
         var query = _db.VerificationJobs
             .Include(j => j.Results)
             .AsQueryable();
 
-        if (!UserAccess.IsAdmin(User))
+        if (!IsAdminUser)
         {
             var userId = UserAccess.GetUserId(User);
             if (string.IsNullOrWhiteSpace(userId))
