@@ -17,6 +17,9 @@ var builder = WebApplication.CreateBuilder(args);
 var exceptionlessApiKey = Environment.GetEnvironmentVariable("Exceptionless__ApiKey")
     ?? Environment.GetEnvironmentVariable("EXCEPTIONLESS_API_KEY")
     ?? builder.Configuration["Exceptionless:ApiKey"];
+var exceptionlessServerUrl = Environment.GetEnvironmentVariable("Exceptionless__ServerUrl")
+    ?? Environment.GetEnvironmentVariable("EXCEPTIONLESS_SERVER_URL")
+    ?? builder.Configuration["Exceptionless:ServerUrl"];
 var exceptionlessEnabled = !string.IsNullOrWhiteSpace(exceptionlessApiKey);
 
 VerificationResult.ConfigureAdditionalCommonMailboxNames(
@@ -31,7 +34,12 @@ builder.Services.AddRazorPages(options =>
 
 if (exceptionlessEnabled)
 {
-    builder.Services.AddExceptionless(exceptionlessApiKey!);
+    builder.Services.AddExceptionless(options =>
+    {
+        options.ApiKey = exceptionlessApiKey!;
+        if (!string.IsNullOrWhiteSpace(exceptionlessServerUrl))
+            options.ServerUrl = exceptionlessServerUrl;
+    });
 }
 
 // Authentication
@@ -460,7 +468,9 @@ if (!app.Environment.IsDevelopment())
 if (exceptionlessEnabled)
 {
     app.UseExceptionless();
-    app.Logger.LogInformation("Exceptionless initialized from configuration.");
+    app.Logger.LogInformation(
+        "Exceptionless initialized from configuration. ServerUrl={ServerUrl}",
+        string.IsNullOrWhiteSpace(exceptionlessServerUrl) ? "(default)" : exceptionlessServerUrl);
 }
 
 app.UseHttpsRedirection();
