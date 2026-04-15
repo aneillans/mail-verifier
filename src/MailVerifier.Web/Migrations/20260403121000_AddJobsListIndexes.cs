@@ -1,3 +1,5 @@
+using MailVerifier.Web.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace MailVerifier.Web.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260403121000_AddJobsListIndexes")]
     public partial class AddJobsListIndexes : Migration
     {
         /// <inheritdoc />
