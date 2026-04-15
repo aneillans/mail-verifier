@@ -1,0 +1,177 @@
+@page
+@model MailVerifier.Web.Pages.Admin.EmailSearchModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Email Address Search";
+}
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-search me-2"></i>Email Address Search</h1>
+        <a asp-page="/Admin/Configuration" class="btn btn-outline-secondary">
+            <i class="bi bi-gear me-1"></i>Admin
+        </a>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="d-flex gap-2">
+                <input type="email"
+                       name="q"
+                       value="@Model.Q"
+                       class="form-control font-monospace"
+                       placeholder="someone@example.com"
+                       autofocus
+                       required />
+                <button type="submit" class="btn btn-primary text-nowrap">
+                    <i class="bi bi-search me-1"></i>Search
+                </button>
+            </form>
+        </div>
+    </div>
+
+    @if (Model.Searched)
+    {
+        @if (!Model.Results.Any())
+        {
+            <div class="alert alert-info">
+                No verification records found for <strong>@Model.Q</strong>.
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small mb-3">
+                Found <strong>@Model.Results.Count</strong> verification record(s) for
+                <strong class="font-monospace">@Model.Q</strong>, most recent first.
+            </p>
+
+            @foreach (var row in Model.Results)
+            {
+                var isVerified = row.IsVerified;
+                var cardBorder = isVerified ? "border-success" : (row.IsRetryable ? "border-warning" : "border-danger");
+                var headerBg  = isVerified ? "bg-success text-white" : (row.IsRetryable ? "bg-warning text-dark" : "bg-danger text-white");
+
+                <div class="card mb-3 @cardBorder">
+                    <div class="card-header @headerBg d-flex justify-content-between align-items-center">
+                        <span>
+                            @if (isVerified)
+                            {
+                                <i class="bi bi-check-circle-fill me-1"></i><strong>Verified</strong>
+                            }
+                            else if (row.IsRetryable)
+                            {
+                                <i class="bi bi-question-circle-fill me-1"></i><strong>Unknown (temporary error)</strong>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle-fill me-1"></i><strong>Not verified</strong>
+                            }
+                            @if (row.IsRetested)
+                            {
+                                <span class="badge bg-info ms-2">Retested</span>
+                            }
+                        </span>
+                        <span class="small">
+                            @row.VerifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-5">Job</dt>
+                                    <dd class="col-sm-7">
+                                        <a asp-page="/Jobs/Details" asp-route-id="@row.JobId">
+                                            #@row.JobId @(row.JobName != null ? $"— {row.JobName}" : "")
+                                        </a>
+                                    </dd>
+                                    <dt class="col-sm-5">Uploaded by</dt>
+                                    <dd class="col-sm-7">@row.UploadedByName</dd>
+                                    @if (row.FirstTestedAt.HasValue && row.IsRetested)
+                                    {
+                                        <dt class="col-sm-5">First tested</dt>
+                                        <dd class="col-sm-7">@row.FirstTestedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
+                                    }
+                                </dl>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm table-borderless mb-0 small">
+                                    <thead>
+                                        <tr class="text-muted">
+                                            <th></th>
+                                            @if (row.IsRetested)
+                                            {
+                                                <th class="text-center">1st test</th>
+                                                <th class="text-center">Retest</th>
+                                            }
+                                            else
+                                            {
+                                                <th class="text-center">Result</th>
+                                            }
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Domain exists</td>
+                                            @if (row.IsRetested && row.OriginalDomainExists.HasValue)
+                                            {
+                                                <td class="text-center">@(row.OriginalDomainExists.Value ? Html.Raw("<span class=\"badge bg-success\">✓</span>") : Html.Raw("<span class=\"badge bg-danger\">✗</span>"))</td>
+                                            }
+                                            <td class="text-center">@(row.DomainExists ? Html.Raw("<span class=\"badge bg-success\">✓</span>") : Html.Raw("<span class=\"badge bg-danger\">✗</span>"))</td>
+                                        </tr>
+                                        <tr>
+                                            <td>MX records</td>
+                                            @if (row.IsRetested && row.OriginalHasMxRecords.HasValue)
+                                            {
+                                                <td class="text-center">@(row.OriginalHasMxRecords.Value ? Html.Raw("<span class=\"badge bg-success\">✓</span>") : Html.Raw("<span class=\"badge bg-danger\">✗</span>"))</td>
+                                            }
+                                            <td class="text-center">@(row.HasMxRecords ? Html.Raw("<span class=\"badge bg-success\">✓</span>") : Html.Raw("<span class=\"badge bg-danger\">✗</span>"))</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Mailbox exists</td>
+                                            @if (row.IsRetested && row.OriginalMailboxExists.HasValue)
+                                            {
+                                                <td class="text-center">@(row.OriginalMailboxExists.Value ? Html.Raw("<span class=\"badge bg-success\">✓</span>") : Html.Raw("<span class=\"badge bg-danger\">✗</span>"))</td>
+                                            }
+                                            <td class="text-center">
+                                                @if (row.MailboxExists)
+                                                {
+                                                    @Html.Raw("<span class=\"badge bg-success\">✓</span>")
+                                                }
+                                                else if (row.IsRetryable)
+                                                {
+                                                    @Html.Raw("<span class=\"badge bg-warning text-dark\">?</span>")
+                                                }
+                                                else
+                                                {
+                                                    @Html.Raw("<span class=\"badge bg-danger\">✗</span>")
+                                                }
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(row.ErrorMessage))
+                        {
+                            <div class="alert alert-warning py-1 px-2 small mb-2">
+                                <i class="bi bi-exclamation-triangle me-1"></i>@row.ErrorMessage
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(row.SmtpLog))
+                        {
+                            <details>
+                                <summary class="text-muted small" style="cursor:pointer">
+                                    <i class="bi bi-chat-text me-1"></i>SMTP Conversation
+                                </summary>
+                                <pre class="mt-2 p-2 bg-light border rounded font-monospace small" style="white-space:pre-wrap;word-break:break-all">@row.SmtpLog</pre>
+                            </details>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
