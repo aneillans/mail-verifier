@@ -21,6 +21,7 @@ public class JobsIndexModel : PageModel
         public int Id { get; init; }
         public string? Name { get; init; }
         public string UploadedByUser { get; init; } = string.Empty;
+        public string UploadedByName { get; init; } = string.Empty;
         public DateTime CreatedAt { get; init; }
         public int TotalEmails { get; init; }
         public int ProcessedEmails { get; init; }
@@ -65,6 +66,7 @@ public class JobsIndexModel : PageModel
                 Id = j.Id,
                 Name = j.Name,
                 UploadedByUser = j.UploadedByUser,
+                UploadedByName = !string.IsNullOrWhiteSpace(j.UploadedByName) ? j.UploadedByName! : j.UploadedByUser,
                 CreatedAt = j.CreatedAt,
                 TotalEmails = j.TotalEmails,
                 ProcessedEmails = j.ProcessedEmails,

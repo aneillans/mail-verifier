@@ -59,6 +59,9 @@ namespace MailVerifier.Web.Migrations
                     b.Property<int>("TotalEmails")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("UploadedByName")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("UploadedByUser")
                         .IsRequired()
                         .HasColumnType("TEXT");

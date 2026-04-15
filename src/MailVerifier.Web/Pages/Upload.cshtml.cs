@@ -57,11 +57,14 @@ public class UploadModel : PageModel
         if (string.IsNullOrWhiteSpace(userId))
             return Forbid();
 
+        var userDisplayName = UserAccess.GetUserDisplayName(User);
+
         // Create the job record
         var job = new VerificationJob
         {
             Name = string.IsNullOrWhiteSpace(jobName) ? null : jobName.Trim(),
             UploadedByUser = userId,
+            UploadedByName = string.IsNullOrWhiteSpace(userDisplayName) ? null : userDisplayName.Trim(),
             CreatedAt = DateTime.UtcNow,
             TotalEmails = emails.Count,
             ProcessedEmails = 0,

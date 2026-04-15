@@ -54,7 +54,7 @@
                             <td>@(job.Name ?? "—")</td>
                             @if (Model.IsAdminUser)
                             {
-                                <td>@job.UploadedByUser</td>
+                                <td>@job.UploadedByName</td>
                             }
                             <td>@job.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                             <td>

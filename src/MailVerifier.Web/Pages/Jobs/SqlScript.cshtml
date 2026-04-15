@@ -48,11 +48,13 @@
                     </select>
                     <div class="form-text">Used when your template does not include <code>%verified%</code>.</div>
                 </div>
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="excludeAtRisk" />
-                    <label class="form-check-label" for="excludeAtRisk">
-                        Exclude "At risk" common mailboxes
-                    </label>
+                <div class="mb-3">
+                    <label for="atRiskMode" class="form-label fw-bold">Common / At Risk Mailboxes</label>
+                    <select id="atRiskMode" class="form-select">
+                        <option value="exclude">Exclude entirely</option>
+                        <option value="force_unverified">Include, but treat as not verified</option>
+                        <option value="include" selected>Include (use original verification result)</option>
+                    </select>
                 </div>
                 <div class="d-flex align-items-center gap-3 mb-3">
                     <button type="button" class="btn btn-primary" id="btnGenerateSql">
@@ -87,7 +89,7 @@
     (function () {
         const emailRows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.EmailRows));
         const includeModeSelect = document.getElementById('includeMode');
-        const excludeAtRiskCheckbox = document.getElementById('excludeAtRisk');
+        const atRiskModeSelect = document.getElementById('atRiskMode');
         const rowCountText = document.getElementById('rowCountText');
 
         function getEmailAddress(row) {
@@ -104,10 +106,20 @@
             return Boolean(value);
         }
 
+        function getEffectiveVerifiedFlag(row, atRiskMode) {
+            const isAtRisk = getAtRiskFlag(row);
+            if (isAtRisk && atRiskMode === 'force_unverified') {
+                return false;
+            }
+
+            return getVerifiedFlag(row);
+        }
+
         function getFilteredRows(template) {
+            const atRiskMode = atRiskModeSelect.value;
             const hasVerifiedPlaceholder = /%verified%/i.test(template);
             const rowsAfterRiskFilter = emailRows.filter(function (row) {
-                return !(excludeAtRiskCheckbox.checked && getAtRiskFlag(row));
+                return !(atRiskMode === 'exclude' && getAtRiskFlag(row));
             });
 
             if (hasVerifiedPlaceholder) {
@@ -116,11 +128,11 @@
 
             const mode = includeModeSelect.value;
             if (mode === 'verified') {
-                return rowsAfterRiskFilter.filter(function (row) { return getVerifiedFlag(row); });
+                return rowsAfterRiskFilter.filter(function (row) { return getEffectiveVerifiedFlag(row, atRiskMode); });
             }
 
             if (mode === 'unverified') {
-                return rowsAfterRiskFilter.filter(function (row) { return !getVerifiedFlag(row); });
+                return rowsAfterRiskFilter.filter(function (row) { return !getEffectiveVerifiedFlag(row, atRiskMode); });
             }
 
             return rowsAfterRiskFilter;
@@ -138,7 +150,7 @@
 
         document.getElementById('sqlTemplate').addEventListener('input', updateRowCountHint);
         includeModeSelect.addEventListener('change', updateRowCountHint);
-        excludeAtRiskCheckbox.addEventListener('change', updateRowCountHint);
+        atRiskModeSelect.addEventListener('change', updateRowCountHint);
         updateRowCountHint();
 
         document.getElementById('btnGenerateSql').addEventListener('click', function () {
@@ -148,9 +160,10 @@
             }
 
             const rows = getFilteredRows(template);
+            const atRiskMode = atRiskModeSelect.value;
             const lines = rows.map(function (row) {
                 const emailAddress = getEmailAddress(row);
-                const verified = getVerifiedFlag(row);
+                const verified = getEffectiveVerifiedFlag(row, atRiskMode);
 
                 return template
                     .replace(/%emailaddress%/gi, emailAddress)
