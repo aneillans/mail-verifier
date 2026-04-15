@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UploadedByUser).IsRequired();
+            entity.Property(e => e.UploadedByName);
             entity.Property(e => e.Status).IsRequired();
             entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => new { e.UploadedByUser, e.CreatedAt });

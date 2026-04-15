@@ -12,6 +12,16 @@ public static class UserAccess
             ?? user.Identity?.Name;
     }
 
+    public static string? GetUserDisplayName(ClaimsPrincipal user)
+    {
+        return user.FindFirst("name")?.Value
+            ?? user.FindFirst(ClaimTypes.Name)?.Value
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? user.FindFirst("email")?.Value
+            ?? user.Identity?.Name
+            ?? GetUserId(user);
+    }
+
     public static bool IsAdmin(ClaimsPrincipal user)
     {
         if (user.IsInRole("Admin") || user.IsInRole("admin"))

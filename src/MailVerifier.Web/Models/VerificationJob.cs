@@ -11,6 +11,8 @@ public class VerificationJob
     [Required]
     public string UploadedByUser { get; set; } = string.Empty;
 
+    public string? UploadedByName { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public int TotalEmails { get; set; }
