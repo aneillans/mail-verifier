@@ -405,10 +405,19 @@ using (var scope = app.Services.CreateScope())
                 cmd.ExecuteNonQuery();
             }
         }
+
     }
     conn.Close();
 
-    db.Database.Migrate();
+    var pendingMigrations = db.Database.GetPendingMigrations().ToList();
+    if (pendingMigrations.Count > 0)
+    {
+        app.Logger.LogInformation(
+            "Applying {Count} pending migration(s): {Migrations}",
+            pendingMigrations.Count,
+            string.Join(", ", pendingMigrations));
+        db.Database.Migrate();
+    }
 
     var staleJobs = db.VerificationJobs
         .Where(j => j.Status == "Pending" || j.Status == "Processing")
