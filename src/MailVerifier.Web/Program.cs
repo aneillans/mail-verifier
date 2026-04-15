@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -13,6 +14,11 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var exceptionlessApiKey = Environment.GetEnvironmentVariable("Exceptionless__ApiKey")
+    ?? Environment.GetEnvironmentVariable("EXCEPTIONLESS_API_KEY")
+    ?? builder.Configuration["Exceptionless:ApiKey"];
+var exceptionlessEnabled = !string.IsNullOrWhiteSpace(exceptionlessApiKey);
+
 VerificationResult.ConfigureAdditionalCommonMailboxNames(
     builder.Configuration.GetSection("Verification:AdditionalCommonMailboxNames").Get<string[]>());
 
@@ -22,6 +28,11 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Error");
 });
+
+if (exceptionlessEnabled)
+{
+    builder.Services.AddExceptionless(exceptionlessApiKey!);
+}
 
 // Authentication
 builder.Services.AddAuthentication(options =>
@@ -444,6 +455,12 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
+}
+
+if (exceptionlessEnabled)
+{
+    app.UseExceptionless();
+    app.Logger.LogInformation("Exceptionless initialized from configuration.");
 }
 
 app.UseHttpsRedirection();
