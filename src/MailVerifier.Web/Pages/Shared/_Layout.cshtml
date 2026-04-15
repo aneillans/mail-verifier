@@ -30,10 +30,22 @@
                     </li>
                     @if (User?.Identity?.IsAuthenticated == true && User.IsInRole("admin"))
                     {
-                        <li class="nav-item">
-                            <a class="nav-link" asp-page="/Admin/Configuration">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-gear"></i> Admin
                             </a>
+                            <ul class="dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item" asp-page="/Admin/EmailSearch">
+                                        <i class="bi bi-search me-1"></i>Email Search
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" asp-page="/Admin/Configuration">
+                                        <i class="bi bi-sliders me-1"></i>Configuration
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                     }
                 </ul>
