@@ -54,6 +54,7 @@
                         Rows where delivered is true/1 remove that recipient from the list.
                     </p>
                     <form method="post" enctype="multipart/form-data" asp-page-handler="Upload" class="d-flex flex-column flex-md-row gap-2">
+                        @Html.AntiForgeryToken()
                         <input type="file" class="form-control" name="csvFile" accept=".csv,text/csv" required />
                         <button type="submit" class="btn btn-primary text-nowrap">
                             <i class="bi bi-upload me-1"></i>Import
