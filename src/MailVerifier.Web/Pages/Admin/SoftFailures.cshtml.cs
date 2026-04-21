@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using MailVerifier.Web.Data;
 using MailVerifier.Web.Models;
 using MailVerifier.Web.Security;
+using MailVerifier.Web.Services;
 
 namespace MailVerifier.Web.Pages.Admin;
 
@@ -21,6 +22,7 @@ public class SoftFailuresModel : PageModel
 
     private readonly AppDbContext _db;
     private readonly ILogger<SoftFailuresModel> _logger;
+    private readonly VerificationQueueService _queueService;
 
     public string? ErrorMessage { get; set; }
 
@@ -31,10 +33,11 @@ public class SoftFailuresModel : PageModel
 
     public List<SoftFailureUploadBatch> RecentUploads { get; set; } = new();
 
-    public SoftFailuresModel(AppDbContext db, ILogger<SoftFailuresModel> logger)
+    public SoftFailuresModel(AppDbContext db, ILogger<SoftFailuresModel> logger, VerificationQueueService queueService)
     {
         _db = db;
         _logger = logger;
+        _queueService = queueService;
     }
 
     public async Task<IActionResult> OnGetAsync()
@@ -181,6 +184,62 @@ public class SoftFailuresModel : PageModel
             $"Import complete. Rows: {upload.TotalRows}, active soft-failure recipients removed: {upload.RecipientRemovals}, failure events added: {upload.FailureRowsRecorded}.";
 
         return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostCreateValidationJobAsync(string? jobName)
+    {
+        if (!UserAccess.IsAdmin(User))
+            return Forbid();
+
+        var recipients = await _db.SoftFailureRecipients
+            .AsNoTracking()
+            .Select(r => r.EmailAddress)
+            .ToListAsync();
+
+        if (recipients.Count == 0)
+        {
+            ErrorMessage = "No soft-failure recipients found to validate.";
+            await LoadSummaryAsync();
+            return Page();
+        }
+
+        var userId = UserAccess.GetUserId(User);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Forbid();
+
+        var userDisplayName = UserAccess.GetUserDisplayName(User);
+
+        // Create the job record
+        var job = new VerificationJob
+        {
+            Name = string.IsNullOrWhiteSpace(jobName) ? "Soft Failure Recipients" : jobName.Trim(),
+            UploadedByUser = userId,
+            UploadedByName = string.IsNullOrWhiteSpace(userDisplayName) ? null : userDisplayName.Trim(),
+            CreatedAt = DateTime.UtcNow,
+            TotalEmails = recipients.Count,
+            ProcessedEmails = 0,
+            Status = "Pending"
+        };
+
+        _db.VerificationJobs.Add(job);
+        await _db.SaveChangesAsync();
+
+        // Store the emails to be processed by the background service
+        foreach (var email in recipients)
+        {
+            _db.JobEmails.Add(new JobEmail
+            {
+                JobId = job.Id,
+                EmailAddress = email.Trim()
+            });
+        }
+        await _db.SaveChangesAsync();
+
+        // Enqueue the job for background batch processing
+        _queueService.EnqueueJob(job.Id);
+
+        // Redirect to job details page
+        return RedirectToPage("/Jobs/Details", new { id = job.Id });
     }
 
     private async Task LoadSummaryAsync()

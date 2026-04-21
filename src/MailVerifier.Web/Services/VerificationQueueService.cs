@@ -135,6 +135,27 @@ public class VerificationQueueService : BackgroundService
                 job.ProcessedEmails = processed;
                 await db.SaveChangesAsync(ct);
 
+                // Remove soft-failure entries that are now definitively failed (hard fails)
+                var hardFailedEmails = results
+                    .Where(r => !r.IsVerified && !string.IsNullOrWhiteSpace(r.ErrorMessage))
+                    .Select(r => r.EmailAddress)
+                    .ToList();
+
+                if (hardFailedEmails.Count > 0)
+                {
+                    var recipientsToRemove = await db.SoftFailureRecipients
+                        .Where(r => hardFailedEmails.Contains(r.EmailAddress))
+                        .ToListAsync(ct);
+
+                    if (recipientsToRemove.Count > 0)
+                    {
+                        db.SoftFailureRecipients.RemoveRange(recipientsToRemove);
+                        await db.SaveChangesAsync(ct);
+                        _logger.LogInformation("Job {JobId}: Removed {Count} hard-failed entries from soft-failure list",
+                            jobId, recipientsToRemove.Count);
+                    }
+                }
+
                 _logger.LogInformation("Job {JobId}: {Processed}/{Total} emails processed",
                     jobId, processed, job.TotalEmails);
             }
