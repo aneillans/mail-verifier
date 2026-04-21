@@ -80,6 +80,27 @@ public class VerificationQueueService : BackgroundService
                 var tasks = batch.Select(email => verifier.VerifyEmailAsync(email));
                 var results = await Task.WhenAll(tasks);
 
+                var softFailureNotes = await db.SoftFailureRecipients
+                    .AsNoTracking()
+                    .Where(r => batch.Contains(r.EmailAddress))
+                    .Select(r => new
+                    {
+                        r.EmailAddress,
+                        LatestCode = r.Events
+                            .OrderByDescending(e => e.RecordedAt)
+                            .Select(e => e.ErrorCode)
+                            .FirstOrDefault(),
+                        LatestResponse = r.Events
+                            .OrderByDescending(e => e.RecordedAt)
+                            .Select(e => e.Response)
+                            .FirstOrDefault()
+                    })
+                    .ToDictionaryAsync(
+                        x => x.EmailAddress,
+                        x => BuildSoftFailureNote(x.LatestCode, x.LatestResponse),
+                        StringComparer.OrdinalIgnoreCase,
+                        ct);
+
                 // Load all existing results for this batch in one query instead of N individual lookups
                 var existingByEmail = await db.VerificationResults
                     .Where(r => r.JobId == jobId && batch.Contains(r.EmailAddress))
@@ -88,6 +109,10 @@ public class VerificationQueueService : BackgroundService
                 foreach (var result in results)
                 {
                     result.JobId = jobId;
+                    result.IsPotentialSoftFailure = softFailureNotes.ContainsKey(result.EmailAddress);
+                    result.SoftFailureNote = result.IsPotentialSoftFailure
+                        ? softFailureNotes[result.EmailAddress]
+                        : null;
 
                     if (existingByEmail.TryGetValue(result.EmailAddress, out var existingResult))
                     {
@@ -96,6 +121,8 @@ public class VerificationQueueService : BackgroundService
                         existingResult.HasMxRecords = result.HasMxRecords;
                         existingResult.MailboxExists = result.MailboxExists;
                         existingResult.ErrorMessage = result.ErrorMessage;
+                        existingResult.IsPotentialSoftFailure = result.IsPotentialSoftFailure;
+                        existingResult.SoftFailureNote = result.SoftFailureNote;
                         db.VerificationResults.Update(existingResult);
                     }
                     else
@@ -131,5 +158,19 @@ public class VerificationQueueService : BackgroundService
             job.Status = "Failed";
             await db.SaveChangesAsync(CancellationToken.None);
         }
+    }
+
+    private static string? BuildSoftFailureNote(string? code, string? response)
+    {
+        if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(response))
+            return null;
+
+        if (string.IsNullOrWhiteSpace(code))
+            return response;
+
+        if (string.IsNullOrWhiteSpace(response))
+            return $"Code {code}";
+
+        return $"Code {code}: {response}";
     }
 }

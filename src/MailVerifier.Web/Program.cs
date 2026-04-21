@@ -517,6 +517,8 @@ app.MapGet("/api/jobs/{id:int}/progress", async (int id, AppDbContext db, HttpCo
             r.MailboxExists,
             r.IsCommonMailbox,
             r.IsAtRisk,
+            r.IsPotentialSoftFailure,
+            r.SoftFailureNote,
             r.IsRetryable,
             r.IsVerified,
             r.ErrorMessage,

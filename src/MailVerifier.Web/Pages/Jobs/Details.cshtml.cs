@@ -93,7 +93,7 @@ public class JobDetailsModel : PageModel
             return NotFound();
 
         var csv = new StringBuilder();
-        csv.AppendLine("Email,DomainExists,HasMxRecords,MailboxExists,Verified,CommonMailbox,AtRisk");
+        csv.AppendLine("Email,DomainExists,HasMxRecords,MailboxExists,Verified,CommonMailbox,AtRisk,PotentialSoftFailure,SoftFailureNote");
 
         var exportResults = Job.Results
             .Where(r => !excludeAtRisk || !r.IsAtRisk)
@@ -101,7 +101,8 @@ public class JobDetailsModel : PageModel
 
         foreach (var result in exportResults)
         {
-            csv.AppendLine($"\"{result.EmailAddress}\",{(result.DomainExists ? "true" : "false")},{(result.HasMxRecords ? "true" : "false")},{(result.MailboxExists ? "true" : "false")},{(result.IsVerified ? "true" : "false")},{(result.IsCommonMailbox ? "true" : "false")},{(result.IsAtRisk ? "true" : "false")}");
+            var softFailureNote = result.SoftFailureNote?.Replace("\"", "\"\"") ?? string.Empty;
+            csv.AppendLine($"\"{result.EmailAddress}\",{(result.DomainExists ? "true" : "false")},{(result.HasMxRecords ? "true" : "false")},{(result.MailboxExists ? "true" : "false")},{(result.IsVerified ? "true" : "false")},{(result.IsCommonMailbox ? "true" : "false")},{(result.IsAtRisk ? "true" : "false")},{(result.IsPotentialSoftFailure ? "true" : "false")},\"{softFailureNote}\"");
         }
 
         var fileName = $"job-{id}-results-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";

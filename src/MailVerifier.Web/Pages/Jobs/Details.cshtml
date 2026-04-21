@@ -169,6 +169,7 @@
                         <th>MX Records</th>
                         <th>Mailbox Exists</th>
                         <th>Status</th>
+                        <th>Soft Failure Signal</th>
                         <th>Error</th>
                         <th>Verified At</th>
                         <th>SMTP Log</th>
@@ -272,6 +273,10 @@
                                 {
                                     <span class="badge bg-info">🔄 Retested</span>
                                 }
+                                else if (result.IsPotentialSoftFailure)
+                                {
+                                    <span class="badge bg-warning text-dark">⚠ Potential soft failure</span>
+                                }
                                 else if (result.IsAtRisk)
                                 {
                                     <span class="badge bg-warning text-dark">⚠ At risk</span>
@@ -298,6 +303,20 @@
                                 }
                             </td>
                             <td>
+                                @if (result.IsPotentialSoftFailure)
+                                {
+                                    <span class="badge bg-warning text-dark">Match</span>
+                                    @if (!string.IsNullOrWhiteSpace(result.SoftFailureNote))
+                                    {
+                                        <div class="small text-muted mt-1">@result.SoftFailureNote</div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td>
                                 @if (!string.IsNullOrEmpty(result.ErrorMessage))
                                 {
                                     <span class="text-danger small">@result.ErrorMessage</span>
@@ -319,7 +338,7 @@
                         @if (!string.IsNullOrEmpty(result.SmtpLog))
                         {
                             <tr class="collapse" id="smtp-@result.Id">
-                                <td colspan="7">
+                                <td colspan="9">
                                     <pre class="bg-dark text-light p-3 rounded small">@result.SmtpLog</pre>
                                 </td>
                             </tr>
@@ -358,6 +377,10 @@
         }
 
         function statusBadge(r) {
+            if (r.isPotentialSoftFailure) {
+                return '<span class="badge bg-warning text-dark">⚠ Potential soft failure</span>';
+            }
+
             if (r.isAtRisk) {
                 return '<span class="badge bg-warning text-dark">⚠ At risk</span>';
             }
@@ -395,6 +418,7 @@
                 <td>${badge(r.hasMxRecords)}</td>
                 <td>${mailboxBadge(r)}</td>
                 <td>${statusBadge(r)}</td>
+                <td>${r.isPotentialSoftFailure ? '<span class="badge bg-warning text-dark">Match</span>' + (r.softFailureNote ? '<div class="small text-muted mt-1">' + escHtml(r.softFailureNote) + '</div>' : '') : '<span class="text-muted small">—</span>'}</td>
                 <td>${r.errorMessage ? '<span class="text-danger small">' + escHtml(r.errorMessage) + '</span>' : ''}</td>
                 <td class="small">${escHtml(r.verifiedAt)}</td>
                 <td>${r.smtpLog ? '<button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#smtp-live-' + r.id + '">Show Log</button>' : ''}</td>`;
@@ -404,7 +428,7 @@
                 const logRow = document.createElement('tr');
                 logRow.className = 'collapse';
                 logRow.id = 'smtp-live-' + r.id;
-                logRow.innerHTML = '<td colspan="8"><pre class="bg-dark text-light p-3 rounded small">' + escHtml(r.smtpLog) + '</pre></td>';
+                logRow.innerHTML = '<td colspan="9"><pre class="bg-dark text-light p-3 rounded small">' + escHtml(r.smtpLog) + '</pre></td>';
                 tbody.appendChild(logRow);
             }
         }

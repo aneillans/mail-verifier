@@ -74,6 +74,10 @@ public class VerificationResult
 
     public bool IsRetested { get; set; } = false;
 
+    public bool IsPotentialSoftFailure { get; set; }
+
+    public string? SoftFailureNote { get; set; }
+
     [NotMapped]
     public bool IsRetryable =>
         !string.IsNullOrWhiteSpace(ErrorMessage) &&
