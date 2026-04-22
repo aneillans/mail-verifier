@@ -74,6 +74,10 @@ public class VerificationResult
 
     public bool IsRetested { get; set; } = false;
 
+    public bool IsPotentialSoftFailure { get; set; }
+
+    public string? SoftFailureNote { get; set; }
+
     [NotMapped]
     public bool IsRetryable =>
         !string.IsNullOrWhiteSpace(ErrorMessage) &&
@@ -120,7 +124,7 @@ public class VerificationResult
     }
 
     [NotMapped]
-    public bool IsAtRisk => IsVerified && IsCommonMailbox;
+    public bool IsAtRisk => (IsVerified && IsCommonMailbox) || IsPotentialSoftFailure;
 
     [NotMapped]
     public bool IsInvalidMailbox =>

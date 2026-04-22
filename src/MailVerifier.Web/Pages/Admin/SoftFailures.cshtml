@@ -1,0 +1,122 @@
+@page "{handler?}"
+@model MailVerifier.Web.Pages.Admin.SoftFailuresModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Soft Failure Uploads";
+}
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-cloud-upload me-2"></i>Soft Failure Uploads</h1>
+        <div class="d-flex gap-2">
+            <a asp-page="/Admin/SoftFailureHistory" class="btn btn-outline-secondary">
+                <i class="bi bi-clock-history me-1"></i>Recipient History
+            </a>
+            <a asp-page="/Admin/EmailSearch" class="btn btn-outline-secondary">
+                <i class="bi bi-search me-1"></i>Email Search
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @Model.SuccessMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @Model.ErrorMessage
+        </div>
+    }
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Active soft-failure recipients</h6>
+                    <div class="display-6">@Model.ActiveRecipientCount</div>
+                    <div class="mt-3">
+                        @if (Model.ActiveRecipientCount > 0)
+                        {
+                            <form method="post" asp-page-handler="CreateValidationJob" style="display: inline;">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-sm btn-primary" title="Create a verification job to re-validate all soft-failure recipients">
+                                    <i class="bi bi-play-circle me-1"></i>Create Validation Job
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5>Upload CSV</h5>
+                    <p class="text-muted small mb-3">
+                        Expected columns: <code>to</code> or <code>email</code>,
+                        <code>delivered</code>,
+                        <code>response</code> or <code>error</code>,
+                        <code>code</code> or <code>errorcode</code>.
+                        Rows where delivered is true/1 remove that recipient from the list.
+                    </p>
+                    <form method="post" enctype="multipart/form-data" asp-page-handler="Upload" class="d-flex flex-column flex-md-row gap-2">
+                        @Html.AntiForgeryToken()
+                        <input type="file" class="form-control" name="csvFile" accept=".csv,text/csv" required />
+                        <button type="submit" class="btn btn-primary text-nowrap">
+                            <i class="bi bi-upload me-1"></i>Import
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <strong>Recent uploads</strong>
+        </div>
+        <div class="card-body p-0">
+            @if (!Model.RecentUploads.Any())
+            {
+                <div class="p-3 text-muted">No uploads yet.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Uploaded</th>
+                                <th>By</th>
+                                <th>File</th>
+                                <th class="text-end">Rows</th>
+                                <th class="text-end">Failures Added</th>
+                                <th class="text-end">Successes Applied</th>
+                                <th class="text-end">Recipients Removed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var upload in Model.RecentUploads)
+                            {
+                                <tr>
+                                    <td>@upload.UploadedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@(upload.UploadedByName ?? upload.UploadedByUser)</td>
+                                    <td>@(upload.FileName ?? "—")</td>
+                                    <td class="text-end">@upload.TotalRows</td>
+                                    <td class="text-end">@upload.FailureRowsRecorded</td>
+                                    <td class="text-end">@upload.SuccessRowsApplied</td>
+                                    <td class="text-end">@upload.RecipientRemovals</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
