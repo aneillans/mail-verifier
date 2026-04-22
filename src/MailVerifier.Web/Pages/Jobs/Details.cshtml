@@ -117,7 +117,7 @@
                 <form method="post" class="d-inline-flex align-items-center gap-2">
                     <div class="form-check mb-0">
                         <input class="form-check-input" type="checkbox" name="excludeAtRisk" value="true" id="excludeAtRisk" />
-                        <label class="form-check-label small" for="excludeAtRisk">Exclude "At risk" common mailboxes</label>
+                        <label class="form-check-label small" for="excludeAtRisk">Exclude "At risk" mailboxes</label>
                     </div>
                     <button type="submit" asp-page-handler="DownloadCsv" asp-route-id="@Model.Job.Id"
                             class="btn btn-outline-success">
@@ -169,7 +169,7 @@
                         <th>MX Records</th>
                         <th>Mailbox Exists</th>
                         <th>Status</th>
-                        <th>Soft Failure Signal</th>
+                        <th>At Risk List Signal</th>
                         <th>Error</th>
                         <th>Verified At</th>
                         <th>SMTP Log</th>
@@ -275,7 +275,7 @@
                                 }
                                 else if (result.IsPotentialSoftFailure)
                                 {
-                                    <span class="badge bg-warning text-dark">⚠ Potential soft failure</span>
+                                    <span class="badge bg-warning text-dark">⚠ At risk (list match)</span>
                                 }
                                 else if (result.IsAtRisk)
                                 {
@@ -378,7 +378,7 @@
 
         function statusBadge(r) {
             if (r.isPotentialSoftFailure) {
-                return '<span class="badge bg-warning text-dark">⚠ Potential soft failure</span>';
+                return '<span class="badge bg-warning text-dark">⚠ At risk (list match)</span>';
             }
 
             if (r.isAtRisk) {

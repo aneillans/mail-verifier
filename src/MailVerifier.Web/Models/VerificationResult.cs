@@ -124,7 +124,7 @@ public class VerificationResult
     }
 
     [NotMapped]
-    public bool IsAtRisk => IsVerified && IsCommonMailbox;
+    public bool IsAtRisk => (IsVerified && IsCommonMailbox) || IsPotentialSoftFailure;
 
     [NotMapped]
     public bool IsInvalidMailbox =>
