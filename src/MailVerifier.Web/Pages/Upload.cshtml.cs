@@ -39,6 +39,7 @@ public class UploadModel : PageModel
         try
         {
             emails = ParseEmails(csvFile);
+            emails = EmailAddressDeduplicator.Deduplicate(emails);
         }
         catch (Exception ex)
         {
