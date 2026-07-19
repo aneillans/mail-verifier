@@ -191,10 +191,11 @@ public class SoftFailuresModel : PageModel
         if (!UserAccess.IsAdmin(User))
             return Forbid();
 
-        var recipients = await _db.SoftFailureRecipients
-            .AsNoTracking()
-            .Select(r => r.EmailAddress)
-            .ToListAsync();
+        var recipients = EmailAddressDeduplicator.Deduplicate(
+            await _db.SoftFailureRecipients
+                .AsNoTracking()
+                .Select(r => r.EmailAddress)
+                .ToListAsync());
 
         if (recipients.Count == 0)
         {

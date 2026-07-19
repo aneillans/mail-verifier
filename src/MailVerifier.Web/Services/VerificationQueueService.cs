@@ -63,10 +63,17 @@ public class VerificationQueueService : BackgroundService
 
         try
         {
-            var emails = await db.JobEmails
-                .Where(e => e.JobId == jobId)
-                .Select(e => e.EmailAddress)
-                .ToListAsync(ct);
+            var emails = EmailAddressDeduplicator.Deduplicate(
+                await db.JobEmails
+                    .Where(e => e.JobId == jobId)
+                    .Select(e => e.EmailAddress)
+                    .ToListAsync(ct));
+
+            if (job.TotalEmails != emails.Count)
+            {
+                job.TotalEmails = emails.Count;
+                await db.SaveChangesAsync(ct);
+            }
 
             int processed = 0;
 
