@@ -1,12 +1,29 @@
 services:
+  postgres:
+    image: postgres:18-alpine
+    volumes:
+      - ./data/postgres:/var/lib/postgresql:Z
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-mailverifier}
+      - POSTGRES_USER=${POSTGRES_USER:-mailverifier}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   mailverifier:
     build: .
     ports:
       - "8080:8080"
-    volumes:
-      - ./data:/data:Z
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-mailverifier};Username=${POSTGRES_USER:-mailverifier};Password=${POSTGRES_PASSWORD:-change-me}
       - OpenIdConnect__Authority=${OIDC_AUTHORITY:-https://auth.neillans.co.uk/realms/MailCheck}
       - OpenIdConnect__ClientId=${OIDC_CLIENT_ID:-mail-verifier}
       - OpenIdConnect__ClientSecret=${OIDC_CLIENT_SECRET:-your-client-secret}

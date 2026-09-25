@@ -371,9 +371,9 @@ static bool TryParseJsonObject(string value, out JsonElement root)
     }
 }
 
-// EF Core / SQLite
+// EF Core / PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // App services
 builder.Services.AddScoped<EmailVerificationService>();
@@ -386,47 +386,10 @@ builder.Services.AddAntiforgery();
 
 var app = builder.Build();
 
-// Ensure DB created and re-enqueue any jobs that were interrupted on last shutdown
+// Apply migrations and re-enqueue any jobs that were interrupted on last shutdown
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-    // If the DB was previously created via EnsureCreated() it has no __EFMigrationsHistory
-    // table. Seed the history with the migrations that match the already-existing schema so
-    // that Migrate() only runs genuinely new migrations (e.g. AddJobName).
-    var conn = db.Database.GetDbConnection();
-    conn.Open();
-    using (var cmd = conn.CreateCommand())
-    {
-        cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'";
-        var historyExists = (long)cmd.ExecuteScalar()! > 0;
-
-        if (!historyExists)
-        {
-            cmd.CommandText = """
-                CREATE TABLE "__EFMigrationsHistory" (
-                    "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
-                    "ProductVersion" TEXT NOT NULL
-                );
-                """;
-            cmd.ExecuteNonQuery();
-
-            // Check whether the original tables are already present (EnsureCreated path).
-            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='VerificationJobs'";
-            var tablesExist = (long)cmd.ExecuteScalar()! > 0;
-
-            if (tablesExist)
-            {
-                cmd.CommandText = """
-                    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260331194128_AddRetestTracking', '10.0.5');
-                    """;
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-    }
-    conn.Close();
 
     var pendingMigrations = db.Database.GetPendingMigrations().ToList();
     if (pendingMigrations.Count > 0)

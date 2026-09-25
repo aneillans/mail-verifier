@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using MailVerifier.Web.Security;
+using Npgsql;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -85,7 +86,7 @@ public class ConfigurationModel : PageModel
             { "Microsoft.AspNetCore", loggingConfig["Microsoft.AspNetCore"] ?? "N/A" }
         };
 
-        // Database (show path but mask credentials)
+        // Database (mask credentials)
         var connString = _configuration.GetConnectionString("DefaultConnection");
         var displayConnString = MaskSensitiveData(connString);
         DisplayConfig["Database"] = new Dictionary<string, string>
@@ -99,14 +100,17 @@ public class ConfigurationModel : PageModel
         if (string.IsNullOrEmpty(value))
             return string.Empty;
 
-        // For connection strings, just show the path (SQLite case)
-        if (value.Contains("Data Source="))
+        try
         {
-            var parts = value.Split(';');
-            return parts[0]; // Just the data source part
+            var builder = new NpgsqlConnectionStringBuilder(value);
+            if (!string.IsNullOrEmpty(builder.Password))
+                builder.Password = "********";
+            return builder.ConnectionString;
         }
-
-        return value;
+        catch (ArgumentException)
+        {
+            return "(unparseable connection string)";
+        }
     }
 
     private Dictionary<string, int> BuildEffectiveConnectionLimits(IConfigurationSection smtpConfig)
