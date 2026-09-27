@@ -43,23 +43,9 @@ public class JobsIndexModel : PageModel
     {
         IsAdminUser = UserAccess.IsAdmin(User);
 
-        var query = _db.VerificationJobs
+        Jobs = await _db.VerificationJobs
             .AsNoTracking()
-            .AsQueryable();
-
-        if (!IsAdminUser)
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-            {
-                Jobs = new List<JobListItem>();
-                return;
-            }
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Jobs = await query
+            .AccessibleTo(User)
             .OrderByDescending(j => j.CreatedAt)
             .Select(j => new JobListItem
             {
@@ -79,76 +65,53 @@ public class JobsIndexModel : PageModel
 
     public async Task<IActionResult> OnPostDeleteJobAsync(int id)
     {
+        // Users can delete their own jobs, admins any job; only stopped jobs can be deleted.
         var job = await _db.VerificationJobs
-            .Include(j => j.Results)
-            .FirstOrDefaultAsync(j => j.Id == id);
+            .AsNoTracking()
+            .AccessibleTo(User)
+            .Where(j => j.Id == id)
+            .Select(j => new { j.Status })
+            .FirstOrDefaultAsync();
 
         if (job == null)
-        {
             return NotFound();
-        }
 
-        // Check authorization - users can only delete their own jobs, admins can delete all
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId) || job.UploadedByUser != userId)
-            {
-                return Forbid();
-            }
-        }
-
-        // Only allow deletion if job is stopped
-        if (job.Status != "Stopped")
+        if (job.Status != JobStatus.Stopped)
         {
             Message = "Can only delete stopped jobs";
             return RedirectToPage();
         }
 
-        // Delete results first (foreign key constraint)
-        _db.VerificationResults.RemoveRange(job.Results);
+        // Results and job emails are removed by the database's ON DELETE CASCADE.
+        await _db.VerificationJobs.Where(j => j.Id == id).ExecuteDeleteAsync();
 
-        // Delete the job
-        _db.VerificationJobs.Remove(job);
-        await _db.SaveChangesAsync();
-
-        Message = $"Job #{job.Id} has been deleted";
+        Message = $"Job #{id} has been deleted";
         return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostRestartJobAsync(int id)
     {
         var job = await _db.VerificationJobs
-            .Include(j => j.Results)
+            .AccessibleTo(User)
             .FirstOrDefaultAsync(j => j.Id == id);
 
         if (job == null)
-        {
             return NotFound();
-        }
 
-        // Check authorization - users can only restart their own jobs, admins can restart all
-        if (!UserAccess.IsAdmin(User))
+        if (JobStatus.IsActive(job.Status))
         {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId) || job.UploadedByUser != userId)
-            {
-                return Forbid();
-            }
+            Message = "Job is already queued or running";
+            return RedirectToPage();
         }
 
-        // Only allow restart if job has no results
-        if (job.Results.Count > 0)
+        if (await _db.VerificationResults.AnyAsync(r => r.JobId == id))
         {
             Message = "Can only restart jobs with no results";
             return RedirectToPage();
         }
 
-        // Reset job for processing
-        job.Status = "Pending";
+        job.Status = JobStatus.Pending;
         job.ProcessedEmails = 0;
-
-        _db.VerificationJobs.Update(job);
         await _db.SaveChangesAsync();
 
         _queue.EnqueueJob(job.Id);

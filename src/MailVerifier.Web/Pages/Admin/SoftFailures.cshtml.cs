@@ -1,7 +1,6 @@
 using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +11,6 @@ using MailVerifier.Web.Services;
 
 namespace MailVerifier.Web.Pages.Admin;
 
-[Authorize]
 public class SoftFailuresModel : PageModel
 {
     private static readonly string[] EmailHeaders = ["to", "email"];
@@ -22,7 +20,7 @@ public class SoftFailuresModel : PageModel
 
     private readonly AppDbContext _db;
     private readonly ILogger<SoftFailuresModel> _logger;
-    private readonly VerificationQueueService _queueService;
+    private readonly JobCreationService _jobCreation;
 
     public string? ErrorMessage { get; set; }
 
@@ -33,27 +31,21 @@ public class SoftFailuresModel : PageModel
 
     public List<SoftFailureUploadBatch> RecentUploads { get; set; } = new();
 
-    public SoftFailuresModel(AppDbContext db, ILogger<SoftFailuresModel> logger, VerificationQueueService queueService)
+    public SoftFailuresModel(AppDbContext db, ILogger<SoftFailuresModel> logger, JobCreationService jobCreation)
     {
         _db = db;
         _logger = logger;
-        _queueService = queueService;
+        _jobCreation = jobCreation;
     }
 
     public async Task<IActionResult> OnGetAsync()
     {
-        if (!UserAccess.IsAdmin(User))
-            return Forbid();
-
         await LoadSummaryAsync();
         return Page();
     }
 
     public async Task<IActionResult> OnPostUploadAsync(IFormFile csvFile)
     {
-        if (!UserAccess.IsAdmin(User))
-            return Forbid();
-
         if (csvFile == null || csvFile.Length == 0)
         {
             ErrorMessage = "Please select a CSV file to upload.";
@@ -188,58 +180,27 @@ public class SoftFailuresModel : PageModel
 
     public async Task<IActionResult> OnPostCreateValidationJobAsync(string? jobName)
     {
-        if (!UserAccess.IsAdmin(User))
+        var recipients = await _db.SoftFailureRecipients
+            .AsNoTracking()
+            .Select(r => r.EmailAddress)
+            .ToListAsync();
+
+        if (UserAccess.GetUserId(User) == null)
             return Forbid();
 
-        var recipients = EmailAddressDeduplicator.Deduplicate(
-            await _db.SoftFailureRecipients
-                .AsNoTracking()
-                .Select(r => r.EmailAddress)
-                .ToListAsync());
+        var job = await _jobCreation.CreateAndEnqueueAsync(
+            string.IsNullOrWhiteSpace(jobName) ? "Soft Failure Recipients" : jobName,
+            recipients,
+            User,
+            HttpContext.RequestAborted);
 
-        if (recipients.Count == 0)
+        if (job == null)
         {
             ErrorMessage = "No soft-failure recipients found to validate.";
             await LoadSummaryAsync();
             return Page();
         }
 
-        var userId = UserAccess.GetUserId(User);
-        if (string.IsNullOrWhiteSpace(userId))
-            return Forbid();
-
-        var userDisplayName = UserAccess.GetUserDisplayName(User);
-
-        // Create the job record
-        var job = new VerificationJob
-        {
-            Name = string.IsNullOrWhiteSpace(jobName) ? "Soft Failure Recipients" : jobName.Trim(),
-            UploadedByUser = userId,
-            UploadedByName = string.IsNullOrWhiteSpace(userDisplayName) ? null : userDisplayName.Trim(),
-            CreatedAt = DateTime.UtcNow,
-            TotalEmails = recipients.Count,
-            ProcessedEmails = 0,
-            Status = "Pending"
-        };
-
-        _db.VerificationJobs.Add(job);
-        await _db.SaveChangesAsync();
-
-        // Store the emails to be processed by the background service
-        foreach (var email in recipients)
-        {
-            _db.JobEmails.Add(new JobEmail
-            {
-                JobId = job.Id,
-                EmailAddress = email.Trim()
-            });
-        }
-        await _db.SaveChangesAsync();
-
-        // Enqueue the job for background batch processing
-        _queueService.EnqueueJob(job.Id);
-
-        // Redirect to job details page
         return RedirectToPage("/Jobs/Details", new { id = job.Id });
     }
 
@@ -358,8 +319,8 @@ public class SoftFailuresModel : PageModel
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        var email = value.Trim().ToLowerInvariant();
-        return email.Contains('@') ? email : null;
+        var email = EmailAddressDeduplicator.Normalize(value);
+        return email != null && email.Contains('@') ? email : null;
     }
 
     private static string? NormalizeText(string? value, int maxLength)

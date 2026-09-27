@@ -42,6 +42,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.EmailAddress).IsRequired();
             entity.HasIndex(e => new { e.JobId, e.EmailAddress }).IsUnique();
             entity.HasIndex(e => e.EmailAddress);
+            entity.HasIndex(e => new { e.JobId, e.VerifiedAt });
         });
 
         modelBuilder.Entity<JobEmail>(entity =>

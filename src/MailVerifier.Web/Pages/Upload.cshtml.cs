@@ -3,8 +3,6 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using MailVerifier.Web.Data;
-using MailVerifier.Web.Models;
 using MailVerifier.Web.Security;
 using MailVerifier.Web.Services;
 
@@ -12,16 +10,14 @@ namespace MailVerifier.Web.Pages;
 
 public class UploadModel : PageModel
 {
-    private readonly AppDbContext _db;
-    private readonly VerificationQueueService _queueService;
+    private readonly JobCreationService _jobCreation;
     private readonly ILogger<UploadModel> _logger;
 
     public string? ErrorMessage { get; set; }
 
-    public UploadModel(AppDbContext db, VerificationQueueService queueService, ILogger<UploadModel> logger)
+    public UploadModel(JobCreationService jobCreation, ILogger<UploadModel> logger)
     {
-        _db = db;
-        _queueService = queueService;
+        _jobCreation = jobCreation;
         _logger = logger;
     }
 
@@ -39,7 +35,6 @@ public class UploadModel : PageModel
         try
         {
             emails = ParseEmails(csvFile);
-            emails = EmailAddressDeduplicator.Deduplicate(emails);
         }
         catch (Exception ex)
         {
@@ -48,46 +43,15 @@ public class UploadModel : PageModel
             return Page();
         }
 
-        if (emails.Count == 0)
+        if (UserAccess.GetUserId(User) == null)
+            return Forbid();
+
+        var job = await _jobCreation.CreateAndEnqueueAsync(jobName, emails, User, HttpContext.RequestAborted);
+        if (job == null)
         {
             ErrorMessage = "No valid email addresses found in the file.";
             return Page();
         }
-
-        var userId = UserAccess.GetUserId(User);
-        if (string.IsNullOrWhiteSpace(userId))
-            return Forbid();
-
-        var userDisplayName = UserAccess.GetUserDisplayName(User);
-
-        // Create the job record
-        var job = new VerificationJob
-        {
-            Name = string.IsNullOrWhiteSpace(jobName) ? null : jobName.Trim(),
-            UploadedByUser = userId,
-            UploadedByName = string.IsNullOrWhiteSpace(userDisplayName) ? null : userDisplayName.Trim(),
-            CreatedAt = DateTime.UtcNow,
-            TotalEmails = emails.Count,
-            ProcessedEmails = 0,
-            Status = "Pending"
-        };
-
-        _db.VerificationJobs.Add(job);
-        await _db.SaveChangesAsync();
-
-        // Store the emails to be processed by the background service
-        foreach (var email in emails)
-        {
-            _db.JobEmails.Add(new JobEmail
-            {
-                JobId = job.Id,
-                EmailAddress = email.Trim()
-            });
-        }
-        await _db.SaveChangesAsync();
-
-        // Enqueue the job for background batch processing (10 at a time)
-        _queueService.EnqueueJob(job.Id);
 
         // Redirect immediately — the user will see live progress on the details page
         return RedirectToPage("/Jobs/Details", new { id = job.Id });

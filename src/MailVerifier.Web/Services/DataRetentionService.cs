@@ -42,16 +42,13 @@ public class DataRetentionService : BackgroundService
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var cutoff = DateTime.UtcNow.AddDays(-_retentionDays);
 
-            var oldJobs = await db.VerificationJobs
+            // Results and job emails are removed by the database's ON DELETE CASCADE.
+            var purged = await db.VerificationJobs
                 .Where(j => j.CreatedAt < cutoff)
-                .ToListAsync();
+                .ExecuteDeleteAsync();
 
-            if (oldJobs.Count > 0)
-            {
-                db.VerificationJobs.RemoveRange(oldJobs);
-                await db.SaveChangesAsync();
-                _logger.LogInformation("Purged {Count} verification jobs older than {Days} days", oldJobs.Count, _retentionDays);
-            }
+            if (purged > 0)
+                _logger.LogInformation("Purged {Count} verification jobs older than {Days} days", purged, _retentionDays);
         }
         catch (Exception ex)
         {

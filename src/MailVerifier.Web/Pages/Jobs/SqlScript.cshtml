@@ -165,9 +165,12 @@
                 const emailAddress = getEmailAddress(row);
                 const verified = getEffectiveVerifiedFlag(row, atRiskMode);
 
+                // Double single quotes so addresses such as o'brien@example.com can't break out of a SQL string
+                // literal; replacer functions stop "$&"-style sequences in addresses being expanded.
+                const sqlSafeEmail = emailAddress.replace(/'/g, "''");
                 return template
-                    .replace(/%emailaddress%/gi, emailAddress)
-                    .replace(/%verified%/gi, verified ? '1' : '0');
+                    .replace(/%emailaddress%/gi, function () { return sqlSafeEmail; })
+                    .replace(/%verified%/gi, function () { return verified ? '1' : '0'; });
             });
 
             const output = document.getElementById('sqlOutput');

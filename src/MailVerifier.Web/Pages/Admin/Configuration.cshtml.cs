@@ -1,43 +1,28 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using MailVerifier.Web.Security;
+using Microsoft.Extensions.Options;
+using MailVerifier.Web.Services.Verification;
 using Npgsql;
-using System.Collections;
-using System.Collections.Generic;
 
 namespace MailVerifier.Web.Pages.Admin;
 
-[Authorize]
 public class ConfigurationModel : PageModel
 {
-    private static readonly Dictionary<string, int> DefaultConnectionLimits = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["hotmail.com"] = 2,
-        ["outlook.com"] = 2,
-        ["live.com"] = 2,
-        ["msn.com"] = 2
-    };
-
     private readonly IConfiguration _configuration;
+    private readonly SmtpConnectionLimiter _limiter;
+    private readonly VerificationOptions _smtp;
 
     public Dictionary<string, object> DisplayConfig { get; set; } = new();
 
-    public ConfigurationModel(IConfiguration configuration)
+    public ConfigurationModel(IConfiguration configuration, SmtpConnectionLimiter limiter, IOptions<VerificationOptions> smtp)
     {
         _configuration = configuration;
+        _limiter = limiter;
+        _smtp = smtp.Value;
     }
 
-    public IActionResult OnGet()
+    public void OnGet()
     {
-        // Check if user is admin
-        if (!UserAccess.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
         BuildDisplayConfig();
-        return Page();
     }
 
     private void BuildDisplayConfig()
@@ -68,14 +53,20 @@ public class ConfigurationModel : PageModel
             { "RetentionDays", retentionConfig["RetentionDays"] ?? "N/A" }
         };
 
-        // SMTP Configuration
-        var smtpConfig = _configuration.GetSection("Smtp");
-        var connectionLimits = BuildEffectiveConnectionLimits(smtpConfig);
+        // SMTP Configuration (effective values, as used by the verifier)
         DisplayConfig["Smtp"] = new Dictionary<string, string>
         {
-            { "EhloHost", Environment.GetEnvironmentVariable("Smtp__EhloHost") ?? smtpConfig["EhloHost"] ?? "N/A" },
-            { "MailFromAddress", Environment.GetEnvironmentVariable("Smtp__MailFromAddress") ?? smtpConfig["MailFromAddress"] ?? "N/A" },
-            { "ConnectionLimits", connectionLimits.Count > 0 ? string.Join(", ", connectionLimits.OrderBy(x => x.Key).Select(x => $"{x.Key}={x.Value}")) : "N/A" }
+            { "EhloHost", _smtp.EffectiveEhloHost },
+            { "MailFromAddress", _smtp.EffectiveMailFromAddress },
+            { "Port", _smtp.Port.ToString() },
+            { "CommandTimeoutMs", _smtp.CommandTimeoutMs.ToString() },
+            { "MaxParallelSessions", _smtp.MaxParallelSessions.ToString() },
+            { "MaxRecipientsPerSession", _smtp.MaxRecipientsPerSession.ToString() },
+            { "MaxMxHostsToTry", _smtp.MaxMxHostsToTry.ToString() },
+            { "CatchAllDetection", _smtp.CatchAllDetection.ToString() },
+            { "DnsCacheMinutes", _smtp.DnsCacheMinutes.ToString() },
+            { "ConnectionLimits", string.Join(", ", _limiter.Rules.OrderBy(x => x.Key).Select(x => $"{x.Key}={x.Value}")) },
+            { "DefaultConnectionLimitPerMxHost", _limiter.DefaultLimitPerMxHost > 0 ? _limiter.DefaultLimitPerMxHost.ToString() : "unlimited" }
         };
 
         // Logging
@@ -111,46 +102,5 @@ public class ConfigurationModel : PageModel
         {
             return "(unparseable connection string)";
         }
-    }
-
-    private Dictionary<string, int> BuildEffectiveConnectionLimits(IConfigurationSection smtpConfig)
-    {
-        var limits = new Dictionary<string, int>(DefaultConnectionLimits, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var child in smtpConfig.GetSection("ConnectionLimits").GetChildren())
-        {
-            var domain = NormalizeDomainKey(child.Key);
-            if (domain == null)
-                continue;
-
-            if (int.TryParse(child.Value, out var maxConnections) && maxConnections > 0)
-            {
-                limits[domain] = maxConnections;
-            }
-        }
-
-        const string envPrefix = "Smtp__ConnectionLimits__";
-        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
-        {
-            if (entry.Key is not string key || !key.StartsWith(envPrefix, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var domain = NormalizeDomainKey(key[envPrefix.Length..]);
-            if (domain == null)
-                continue;
-
-            if (entry.Value is string rawValue && int.TryParse(rawValue, out var maxConnections) && maxConnections > 0)
-            {
-                limits[domain] = maxConnections;
-            }
-        }
-
-        return limits;
-    }
-
-    private static string? NormalizeDomainKey(string? value)
-    {
-        var domain = value?.Trim().TrimStart('.').ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(domain) ? null : domain;
     }
 }

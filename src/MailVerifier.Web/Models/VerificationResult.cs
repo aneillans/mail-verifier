@@ -78,6 +78,12 @@ public class VerificationResult
 
     public string? SoftFailureNote { get; set; }
 
+    /// <summary>The recipient domain accepted a random probe address, so RCPT acceptance proves nothing.</summary>
+    public bool IsCatchAll { get; set; }
+
+    /// <summary>Queued for re-verification by "Rerun"; cleared once the new result is stored.</summary>
+    public bool PendingRetest { get; set; }
+
     [NotMapped]
     public bool IsRetryable =>
         !string.IsNullOrWhiteSpace(ErrorMessage) &&
@@ -124,7 +130,7 @@ public class VerificationResult
     }
 
     [NotMapped]
-    public bool IsAtRisk => (IsVerified && IsCommonMailbox) || IsPotentialSoftFailure;
+    public bool IsAtRisk => (IsVerified && (IsCommonMailbox || IsCatchAll)) || IsPotentialSoftFailure;
 
     [NotMapped]
     public bool IsInvalidMailbox =>

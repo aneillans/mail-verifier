@@ -32,4 +32,10 @@ services:
       - OpenIdConnect__CallbackScheme=${OIDC_CALLBACK_SCHEME:-http}
       - OpenIdConnect__CallbackHost=${OIDC_CALLBACK_HOST:-localhost:8080}
       - Smtp__EhloHost=${SMTP_EHLO_HOST:-mailverifier.local}
+    healthcheck:
+      test: ["CMD", "dotnet", "MailVerifier.Web.dll", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     restart: on-failure
