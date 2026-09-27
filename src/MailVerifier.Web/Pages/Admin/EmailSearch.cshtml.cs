@@ -1,14 +1,12 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using MailVerifier.Web.Data;
 using MailVerifier.Web.Models;
-using MailVerifier.Web.Security;
+using MailVerifier.Web.Services;
 
 namespace MailVerifier.Web.Pages.Admin;
 
-[Authorize]
 public class EmailSearchModel : PageModel
 {
     private readonly AppDbContext _db;
@@ -51,18 +49,15 @@ public class EmailSearchModel : PageModel
         _db = db;
     }
 
-    public IActionResult OnGet()
+    public async Task<IActionResult> OnGetAsync()
     {
-        if (!UserAccess.IsAdmin(User))
-            return Forbid();
-
         if (string.IsNullOrWhiteSpace(Q))
             return Page();
 
         Searched = true;
-        var email = Q.Trim();
+        var email = EmailAddressDeduplicator.Normalize(Q);
 
-        Results = _db.VerificationResults
+        Results = await _db.VerificationResults
             .AsNoTracking()
             .Where(r => r.EmailAddress == email)
             .OrderByDescending(r => r.VerifiedAt)
@@ -86,7 +81,7 @@ public class EmailSearchModel : PageModel
                 VerifiedAt = r.VerifiedAt,
                 FirstTestedAt = r.FirstTestedAt,
             })
-            .ToList();
+            .ToListAsync();
 
         return Page();
     }

@@ -28,7 +28,7 @@
                     <li class="nav-item">
                         <a class="nav-link" asp-page="/Jobs/Index">Jobs</a>
                     </li>
-                    @if (User?.Identity?.IsAuthenticated == true && User.IsInRole("admin"))
+                    @if (User?.Identity?.IsAuthenticated == true && UserAccess.IsAdmin(User))
                     {
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">

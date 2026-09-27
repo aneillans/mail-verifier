@@ -61,9 +61,9 @@
                                 @{
                                     var badgeClass = job.Status switch
                                     {
-                                        "Completed" => "bg-success",
-                                        "Processing" => "bg-warning text-dark",
-                                        "Failed" => "bg-danger",
+                                        JobStatus.Completed => "bg-success",
+                                        JobStatus.Processing => "bg-warning text-dark",
+                                        JobStatus.Failed => "bg-danger",
                                         _ => "bg-secondary"
                                     };
                                 }
@@ -83,7 +83,7 @@
                                     <a asp-page="/Jobs/Details" asp-route-id="@job.Id" class="btn btn-outline-primary">
                                         View Details
                                     </a>
-                                    @if (job.Status == "Completed")
+                                    @if (job.Status == JobStatus.Completed)
                                     {
                                         <a asp-page="/Jobs/SqlScript" asp-route-id="@job.Id" class="btn btn-outline-success">
                                             Generate SQL
@@ -98,7 +98,7 @@
                                             </button>
                                         </form>
                                     }
-                                    @if (job.Status == "Stopped")
+                                    @if (job.Status == JobStatus.Stopped)
                                     {
                                         <form method="post" asp-page-handler="DeleteJob" style="display: inline;">
                                             <input type="hidden" name="id" value="@job.Id" />

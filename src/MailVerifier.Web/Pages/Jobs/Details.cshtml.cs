@@ -1,4 +1,5 @@
-using System.Text;
+using System.Globalization;
+using CsvHelper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -16,11 +17,13 @@ public class JobDetailsModel : PageModel
 
     public VerificationJob? Job { get; set; }
 
+    public List<ResultSummary> Results { get; set; } = new();
+
     public string EstimatedTimeRemaining
     {
         get
         {
-            if (Job == null || Job.ProcessedEmails == 0 || Job.Status == "Completed")
+            if (Job == null || Job.ProcessedEmails == 0 || Job.Status == JobStatus.Completed)
                 return "—";
 
             var remainingEmails = Job.TotalEmails - Job.ProcessedEmails;
@@ -29,16 +32,13 @@ public class JobDetailsModel : PageModel
 
             var elapsedTime = DateTime.UtcNow - Job.CreatedAt;
             var averageTimePerEmail = elapsedTime.TotalSeconds / Job.ProcessedEmails;
-            var estimatedSecondsRemaining = averageTimePerEmail * remainingEmails;
-            var estimatedTimeRemaining = TimeSpan.FromSeconds(estimatedSecondsRemaining);
+            var estimatedTimeRemaining = TimeSpan.FromSeconds(averageTimePerEmail * remainingEmails);
 
-            // Format as human-readable string
             if (estimatedTimeRemaining.TotalHours >= 1)
                 return $"{(int)estimatedTimeRemaining.TotalHours}h {estimatedTimeRemaining.Minutes}m";
-            else if (estimatedTimeRemaining.TotalMinutes >= 1)
+            if (estimatedTimeRemaining.TotalMinutes >= 1)
                 return $"{(int)estimatedTimeRemaining.TotalMinutes}m {estimatedTimeRemaining.Seconds}s";
-            else
-                return $"{(int)estimatedTimeRemaining.TotalSeconds}s";
+            return $"{(int)estimatedTimeRemaining.TotalSeconds}s";
         }
     }
 
@@ -50,185 +50,149 @@ public class JobDetailsModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(int id)
     {
-        var query = _db.VerificationJobs
-            .Include(j => j.Results)
-            .Where(j => j.Id == id)
-            .AsQueryable();
-
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-                return NotFound();
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Job = await query.FirstOrDefaultAsync();
-
+        Job = await FindJobAsync(id, tracked: false);
         if (Job == null)
             return NotFound();
+
+        Results = await _db.VerificationResults
+            .AsNoTracking()
+            .Where(r => r.JobId == id)
+            .OrderBy(r => r.EmailAddress)
+            .SelectSummaries()
+            .ToListAsync();
 
         return Page();
     }
 
     public async Task<IActionResult> OnPostDownloadCsvAsync(int id, bool excludeAtRisk = false)
     {
-        var query = _db.VerificationJobs
-            .Include(j => j.Results)
-            .Where(j => j.Id == id)
-            .AsQueryable();
-
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-                return NotFound();
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Job = await query.FirstOrDefaultAsync();
-        if (Job == null)
+        if (await FindJobAsync(id, tracked: false) == null)
             return NotFound();
 
-        var csv = new StringBuilder();
-        csv.AppendLine("Email,DomainExists,HasMxRecords,MailboxExists,Verified,CommonMailbox,AtRisk,PotentialSoftFailure,SoftFailureNote");
+        var results = await _db.VerificationResults
+            .AsNoTracking()
+            .Where(r => r.JobId == id)
+            .OrderBy(r => r.EmailAddress)
+            .SelectSummaries()
+            .Select(s => s.Result)
+            .ToListAsync();
 
-        var exportResults = Job.Results
-            .Where(r => !excludeAtRisk || !r.IsAtRisk)
-            .OrderBy(r => r.EmailAddress);
-
-        foreach (var result in exportResults)
+        using var buffer = new MemoryStream();
+        await using (var writer = new StreamWriter(buffer, leaveOpen: true))
+        await using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
         {
-            var softFailureNote = result.SoftFailureNote?.Replace("\"", "\"\"") ?? string.Empty;
-            csv.AppendLine($"\"{result.EmailAddress}\",{(result.DomainExists ? "true" : "false")},{(result.HasMxRecords ? "true" : "false")},{(result.MailboxExists ? "true" : "false")},{(result.IsVerified ? "true" : "false")},{(result.IsCommonMailbox ? "true" : "false")},{(result.IsAtRisk ? "true" : "false")},{(result.IsPotentialSoftFailure ? "true" : "false")},\"{softFailureNote}\"");
+            foreach (var header in new[] { "Email", "DomainExists", "HasMxRecords", "MailboxExists", "Verified", "CommonMailbox", "CatchAll", "AtRisk", "PotentialSoftFailure", "SoftFailureNote" })
+                csv.WriteField(header);
+            await csv.NextRecordAsync();
+
+            foreach (var result in results.Where(r => !excludeAtRisk || !r.IsAtRisk))
+            {
+                csv.WriteField(CsvSafe(result.EmailAddress));
+                csv.WriteField(result.DomainExists);
+                csv.WriteField(result.HasMxRecords);
+                csv.WriteField(result.MailboxExists);
+                csv.WriteField(result.IsVerified);
+                csv.WriteField(result.IsCommonMailbox);
+                csv.WriteField(result.IsCatchAll);
+                csv.WriteField(result.IsAtRisk);
+                csv.WriteField(result.IsPotentialSoftFailure);
+                csv.WriteField(CsvSafe(result.SoftFailureNote));
+                await csv.NextRecordAsync();
+            }
         }
 
         var fileName = $"job-{id}-results-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
-        var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-        return File(bytes, "text/csv", fileName);
+        return File(buffer.ToArray(), "text/csv", fileName);
     }
 
     public async Task<IActionResult> OnPostRerunTimeoutsAsync(int id)
     {
-        var query = _db.VerificationJobs
-            .Include(j => j.Results)
-            .Where(j => j.Id == id)
-            .AsQueryable();
-
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-                return NotFound();
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Job = await query.FirstOrDefaultAsync();
+        Job = await FindJobAsync(id, tracked: true);
         if (Job == null)
             return NotFound();
 
-        // Find all results with error messages (timeouts or connection errors)
-        var timedOutResults = Job.Results.Where(r => !string.IsNullOrEmpty(r.ErrorMessage)).ToList();
-
-        if (timedOutResults.Count > 0)
+        if (JobStatus.IsActive(Job.Status))
         {
-            // Preserve original results and mark for retest instead of deleting
-            foreach (var result in timedOutResults)
-            {
-                // Store original values if this is the first retest
-                if (!result.IsRetested)
-                {
-                    result.OriginalDomainExists = result.DomainExists;
-                    result.OriginalHasMxRecords = result.HasMxRecords;
-                    result.OriginalMailboxExists = result.MailboxExists;
-                    result.FirstTestedAt = result.VerifiedAt;
-                }
-
-                // Mark as retested and clear error for reprocessing
-                result.IsRetested = true;
-                result.ErrorMessage = null;
-                result.VerifiedAt = DateTime.UtcNow;
-            }
-
-            await _db.SaveChangesAsync();
-
-            // Requeue the job
-            _queueService.EnqueueJob(Job.Id);
-
-            TempData["SuccessMessage"] = $"Marked {timedOutResults.Count} email(s) for retest. They will be re-verified shortly.";
+            TempData["InfoMessage"] = "The job is still running.";
+            return RedirectToPage(new { id });
         }
-        else
+
+        var failedResults = await _db.VerificationResults
+            .Where(r => r.JobId == id && r.ErrorMessage != null && r.ErrorMessage != "")
+            .ToListAsync();
+
+        if (failedResults.Count == 0)
         {
             TempData["InfoMessage"] = "No timed-out results found to rerun.";
+            return RedirectToPage(new { id });
         }
 
+        foreach (var result in failedResults)
+        {
+            // Preserve the first run's outcome for comparison.
+            if (!result.IsRetested)
+            {
+                result.OriginalDomainExists = result.DomainExists;
+                result.OriginalHasMxRecords = result.HasMxRecords;
+                result.OriginalMailboxExists = result.MailboxExists;
+                result.FirstTestedAt = result.VerifiedAt;
+            }
+
+            result.IsRetested = true;
+            result.PendingRetest = true;
+            result.ErrorMessage = null;
+            result.VerifiedAt = DateTime.UtcNow;
+        }
+
+        Job.Status = JobStatus.Pending;
+        Job.ProcessedEmails = Math.Max(0, Job.ProcessedEmails - failedResults.Count);
+        await _db.SaveChangesAsync();
+
+        // Only results flagged PendingRetest are re-verified.
+        _queueService.EnqueueJob(id);
+
+        TempData["SuccessMessage"] = $"Marked {failedResults.Count} email(s) for retest. They will be re-verified shortly.";
         return RedirectToPage(new { id });
     }
 
     public async Task<IActionResult> OnPostStopJobAsync(int id)
     {
-        var query = _db.VerificationJobs
-            .Include(j => j.Results)
-            .Where(j => j.Id == id)
-            .AsQueryable();
-
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-                return NotFound();
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Job = await query.FirstOrDefaultAsync();
+        Job = await FindJobAsync(id, tracked: false);
         if (Job == null)
             return NotFound();
 
-        if (Job.Status is "Pending" or "Processing")
-        {
-            Job.Status = "Stopped";
-            await _db.SaveChangesAsync();
+        // The queue checks the status between batches and cancels in-flight verification.
+        var stopped = await _db.VerificationJobs
+            .Where(j => j.Id == id && (j.Status == JobStatus.Pending || j.Status == JobStatus.Processing))
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Stopped));
+
+        if (stopped > 0)
             TempData["SuccessMessage"] = "Job stopped successfully.";
-        }
         else
-        {
             TempData["InfoMessage"] = $"Cannot stop job with status '{Job.Status}'.";
-        }
 
         return RedirectToPage(new { id });
     }
 
     public async Task<IActionResult> OnPostDeleteResultsAsync(int id)
     {
-        var query = _db.VerificationJobs
-            .Include(j => j.Results)
-            .Where(j => j.Id == id)
-            .AsQueryable();
-
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-                return NotFound();
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Job = await query.FirstOrDefaultAsync();
+        Job = await FindJobAsync(id, tracked: false);
         if (Job == null)
             return NotFound();
 
-        var resultCount = Job.Results.Count;
-        if (resultCount > 0)
+        if (JobStatus.IsActive(Job.Status))
         {
-            _db.VerificationResults.RemoveRange(Job.Results);
-            Job.ProcessedEmails = 0;
-            await _db.SaveChangesAsync();
-            TempData["SuccessMessage"] = $"Deleted {resultCount} result(s).";
+            TempData["InfoMessage"] = "Stop the job before deleting its results.";
+            return RedirectToPage(new { id });
+        }
+
+        var deleted = await _db.VerificationResults.Where(r => r.JobId == id).ExecuteDeleteAsync();
+        if (deleted > 0)
+        {
+            await _db.VerificationJobs
+                .Where(j => j.Id == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(j => j.ProcessedEmails, 0));
+            TempData["SuccessMessage"] = $"Deleted {deleted} result(s).";
         }
         else
         {
@@ -237,4 +201,16 @@ public class JobDetailsModel : PageModel
 
         return RedirectToPage(new { id });
     }
+
+    private Task<VerificationJob?> FindJobAsync(int id, bool tracked)
+    {
+        var jobs = tracked ? _db.VerificationJobs : _db.VerificationJobs.AsNoTracking();
+        return jobs.AccessibleTo(User).FirstOrDefaultAsync(j => j.Id == id);
+    }
+
+    /// <summary>Stops spreadsheet apps from evaluating a cell as a formula (CSV injection).</summary>
+    internal static string? CsvSafe(string? value) =>
+        !string.IsNullOrEmpty(value) && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r'
+            ? "'" + value
+            : value;
 }

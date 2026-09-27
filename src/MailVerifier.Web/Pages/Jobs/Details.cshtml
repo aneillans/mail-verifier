@@ -3,7 +3,7 @@
 @{
     Layout = "_Layout";
     ViewData["Title"] = $"Job #{Model.Job?.Id} Details";
-    var isLive = Model.Job?.Status is "Pending" or "Processing";
+    var isLive = JobStatus.IsActive(Model.Job?.Status);
 }
 
 <div class="container py-4">
@@ -47,8 +47,8 @@
                         @{
                             var badgeClass = Model.Job.Status switch
                             {
-                                "Completed" => "bg-success",
-                                "Processing" => "bg-warning text-dark",
+                                JobStatus.Completed => "bg-success",
+                                JobStatus.Processing => "bg-warning text-dark",
                                 "Pending"    => "bg-secondary",
                                 "Failed"     => "bg-danger",
                                 "Stopped"    => "bg-secondary",
@@ -71,7 +71,7 @@
                 <div class="card text-center">
                     <div class="card-body">
                         <h5 class="card-title">Valid Mailboxes</h5>
-                        <p id="valid-count" class="display-6 text-success">@Model.Job.Results.Count(r => r.MailboxExists)</p>
+                        <p id="valid-count" class="display-6 text-success">@Model.Results.Count(r => r.Result.MailboxExists)</p>
                     </div>
                 </div>
             </div>
@@ -89,7 +89,7 @@
         {
             <div class="mb-4">
                 <div class="d-flex justify-content-between mb-1">
-                    <span class="small text-muted">Processing in batches of 10&hellip;</span>
+                    <span class="small text-muted">Processing&hellip;</span>
                     <span id="progress-label" class="small text-muted">
                         @Model.Job.ProcessedEmails / @Model.Job.TotalEmails
                     </span>
@@ -110,9 +110,9 @@
 
         <div class="mb-4">
             @{
-                var timedOutCount = Model.Job.Results.Count(r => !string.IsNullOrEmpty(r.ErrorMessage));
+                var timedOutCount = Model.Results.Count(r => !string.IsNullOrEmpty(r.Result.ErrorMessage));
             }
-            @if (Model.Job.Status == "Completed")
+            @if (Model.Job.Status == JobStatus.Completed)
             {
                 <form method="post" class="d-inline-flex align-items-center gap-2">
                     <div class="form-check mb-0">
@@ -137,18 +137,18 @@
                         </button>
                     </form>
                 }
-                @if (Model.Job.Results.Count > 0)
+                @if (Model.Results.Count > 0)
                 {
                     <form method="post" style="display:inline-block;">
                         <button type="submit" asp-page-handler="DeleteResults" asp-route-id="@Model.Job.Id"
                                 class="btn btn-outline-danger"
-                                onclick="return confirm('Delete all @Model.Job.Results.Count result(s)? This cannot be undone.');">
+                                onclick="return confirm('Delete all @Model.Results.Count result(s)? This cannot be undone.');">
                             <i class="bi bi-trash me-2"></i>Delete Results
                         </button>
                     </form>
                 }
             }
-            @if (Model.Job.Status is "Pending" or "Processing")
+            @if (isLive)
             {
                 <form method="post" style="display:inline-block;">
                     <button type="submit" asp-page-handler="StopJob" asp-route-id="@Model.Job.Id"
@@ -176,8 +176,9 @@
                     </tr>
                 </thead>
                 <tbody id="results-tbody">
-                    @foreach (var result in Model.Job.Results.OrderBy(r => r.EmailAddress))
+                    @foreach (var summary in Model.Results)
                     {
+                        var result = summary.Result;
                         <tr data-result-id="@result.Id">
                             <td>@result.EmailAddress</td>
                             <td>
@@ -279,7 +280,7 @@
                                 }
                                 else if (result.IsAtRisk)
                                 {
-                                    <span class="badge bg-warning text-dark">⚠ At risk</span>
+                                    <span class="badge bg-warning text-dark">⚠ At risk@(result.IsCatchAll ? " (catch-all)" : "")</span>
                                 }
                                 else if (result.IsVerified)
                                 {
@@ -324,25 +325,15 @@
                             </td>
                             <td class="small">@result.VerifiedAt.ToLocalTime().ToString("HH:mm:ss")</td>
                             <td>
-                                @if (!string.IsNullOrEmpty(result.SmtpLog))
+                                @if (summary.HasLog)
                                 {
-                                    <button class="btn btn-sm btn-outline-secondary"
-                                            type="button"
-                                            data-bs-toggle="collapse"
-                                            data-bs-target="#smtp-@result.Id">
+                                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                                            data-log-url="/api/jobs/@Model.Job.Id/results/@result.Id/log">
                                         Show Log
                                     </button>
                                 }
                             </td>
                         </tr>
-                        @if (!string.IsNullOrEmpty(result.SmtpLog))
-                        {
-                            <tr class="collapse" id="smtp-@result.Id">
-                                <td colspan="9">
-                                    <pre class="bg-dark text-light p-3 rounded small">@result.SmtpLog</pre>
-                                </td>
-                            </tr>
-                        }
                     }
                 </tbody>
             </table>
@@ -350,17 +341,46 @@
     }
 </div>
 
-@if (isLive)
+@if (Model.Job != null)
 {
     <script>
     (function () {
+        function escHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // SMTP logs are loaded on demand rather than shipped with every row.
+        document.getElementById('results-tbody').addEventListener('click', async function (e) {
+            const btn = e.target.closest('button[data-log-url]');
+            if (!btn) return;
+
+            const row = btn.closest('tr');
+            const existing = row.nextElementSibling;
+            if (existing && existing.classList.contains('smtp-log-row')) {
+                existing.classList.toggle('d-none');
+                return;
+            }
+
+            btn.disabled = true;
+            try {
+                const resp = await fetch(btn.dataset.logUrl);
+                const text = resp.ok ? await resp.text() : 'Failed to load log (' + resp.status + ')';
+                const logRow = document.createElement('tr');
+                logRow.className = 'smtp-log-row';
+                logRow.innerHTML = '<td colspan="9"><pre class="bg-dark text-light p-3 rounded small mb-0">' + escHtml(text) + '</pre></td>';
+                row.after(logRow);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        if (!@(isLive ? "true" : "false")) return;
+
         const POLL_INTERVAL_MS = 2000;
-        const jobId = @Model.Job!.Id;
-        const total  = @Model.Job.TotalEmails;
-        const renderedIds = new Set(
-            Array.from(document.querySelectorAll('#results-tbody tr[data-result-id]'))
-                 .map(r => parseInt(r.dataset.resultId, 10))
-        );
+        const jobId = @Model.Job.Id;
+        const total = @Model.Job.TotalEmails;
+        let cursor = 0;
 
         function badge(yes) {
             return yes
@@ -369,88 +389,83 @@
         }
 
         function mailboxBadge(r) {
+            if (r.pendingRetest) {
+                return '<span class="badge bg-secondary">… Pending</span>';
+            }
             if (r.isRetryable) {
                 return '<span class="badge bg-warning text-dark">? Unknown</span>';
             }
-
             return badge(r.mailboxExists);
         }
 
         function statusBadge(r) {
+            if (r.pendingRetest) {
+                return '<span class="badge bg-info">🔄 Retesting</span>';
+            }
             if (r.isPotentialSoftFailure) {
                 return '<span class="badge bg-warning text-dark">⚠ At risk (list match)</span>';
             }
-
             if (r.isAtRisk) {
-                return '<span class="badge bg-warning text-dark">⚠ At risk</span>';
+                return '<span class="badge bg-warning text-dark">⚠ At risk' + (r.isCatchAll ? ' (catch-all)' : '') + '</span>';
             }
-
             if (r.isVerified) {
                 return '<span class="badge bg-success">✓ Verified</span>';
             }
-
             if (r.isRetryable) {
                 return '<span class="badge bg-warning text-dark">⟳ Retryable</span>';
             }
-
             if (r.domainExists && r.hasMxRecords && !r.mailboxExists && !r.errorMessage) {
                 return '<span class="badge bg-danger">✗ Invalid Mailbox</span>';
             }
-
             if (r.errorMessage) {
                 return '<span class="badge bg-danger">⚠ Failed</span>';
             }
-
             return '<span class="badge bg-secondary">• Unverified</span>';
         }
 
-        function appendResult(r) {
-            if (renderedIds.has(r.id)) return;
-            renderedIds.add(r.id);
-
-            const tbody = document.getElementById('results-tbody');
-
-            const tr = document.createElement('tr');
-            tr.dataset.resultId = r.id;
-            tr.innerHTML = `
+        function rowHtml(r) {
+            const softFailure = r.isPotentialSoftFailure
+                ? '<span class="badge bg-warning text-dark">Match</span>' + (r.softFailureNote ? '<div class="small text-muted mt-1">' + escHtml(r.softFailureNote) + '</div>' : '')
+                : '<span class="text-muted small">—</span>';
+            const logButton = r.hasLog
+                ? '<button class="btn btn-sm btn-outline-secondary" type="button" data-log-url="/api/jobs/' + jobId + '/results/' + r.id + '/log">Show Log</button>'
+                : '';
+            return `
                 <td>${escHtml(r.emailAddress)}</td>
                 <td>${badge(r.domainExists)}</td>
                 <td>${badge(r.hasMxRecords)}</td>
                 <td>${mailboxBadge(r)}</td>
                 <td>${statusBadge(r)}</td>
-                <td>${r.isPotentialSoftFailure ? '<span class="badge bg-warning text-dark">Match</span>' + (r.softFailureNote ? '<div class="small text-muted mt-1">' + escHtml(r.softFailureNote) + '</div>' : '') : '<span class="text-muted small">—</span>'}</td>
+                <td>${softFailure}</td>
                 <td>${r.errorMessage ? '<span class="text-danger small">' + escHtml(r.errorMessage) + '</span>' : ''}</td>
                 <td class="small">${escHtml(r.verifiedAt)}</td>
-                <td>${r.smtpLog ? '<button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#smtp-live-' + r.id + '">Show Log</button>' : ''}</td>`;
-            tbody.appendChild(tr);
-
-            if (r.smtpLog) {
-                const logRow = document.createElement('tr');
-                logRow.className = 'collapse';
-                logRow.id = 'smtp-live-' + r.id;
-                logRow.innerHTML = '<td colspan="9"><pre class="bg-dark text-light p-3 rounded small">' + escHtml(r.smtpLog) + '</pre></td>';
-                tbody.appendChild(logRow);
-            }
+                <td>${logButton}</td>`;
         }
 
-        function escHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        function upsertResult(r) {
+            const tbody = document.getElementById('results-tbody');
+            let tr = tbody.querySelector('tr[data-result-id="' + r.id + '"]');
+            if (tr) {
+                // Result was re-verified: drop its stale log and redraw the row.
+                const next = tr.nextElementSibling;
+                if (next && next.classList.contains('smtp-log-row')) next.remove();
+            } else {
+                tr = document.createElement('tr');
+                tr.dataset.resultId = r.id;
+                tbody.appendChild(tr);
+            }
+            tr.innerHTML = rowHtml(r);
         }
 
         function formatTimeRemaining(seconds) {
             if (seconds <= 0) return '—';
             if (seconds >= 3600) {
-                const hours = Math.floor(seconds / 3600);
-                const mins = Math.floor((seconds % 3600) / 60);
-                return `${hours}h ${mins}m`;
+                return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
             }
             if (seconds >= 60) {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}m ${secs}s`;
+                return Math.floor(seconds / 60) + 'm ' + Math.floor(seconds % 60) + 's';
             }
-            return `${Math.floor(seconds)}s`;
+            return Math.floor(seconds) + 's';
         }
 
         function updateProgress(processed, status, createdAtUtc) {
@@ -458,49 +473,41 @@
             document.getElementById('progress-bar').style.width = pct + '%';
             document.getElementById('progress-label').textContent = processed + ' / ' + total;
 
-            const badge = document.getElementById('status-badge');
-            badge.textContent = status;
-            badge.className = 'badge fs-6 ' + ({
+            const badgeEl = document.getElementById('status-badge');
+            badgeEl.textContent = status;
+            badgeEl.className = 'badge fs-6 ' + ({
                 Completed: 'bg-success',
                 Processing: 'bg-warning text-dark',
-                Pending:    'bg-secondary',
-                Failed:     'bg-danger'
+                Pending: 'bg-secondary',
+                Failed: 'bg-danger',
+                Stopped: 'bg-secondary'
             }[status] ?? 'bg-secondary');
 
-            if (status === 'Completed' || status === 'Failed') {
+            if (status !== 'Pending' && status !== 'Processing') {
                 const bar = document.getElementById('progress-bar');
                 bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
                 bar.classList.add(status === 'Completed' ? 'bg-success' : 'bg-danger');
             }
 
-            // Update ETA if job is still processing
             if ((status === 'Pending' || status === 'Processing') && processed > 0 && createdAtUtc) {
-                const createdAtMs = createdAtUtc; // Already in milliseconds since Unix epoch
-                const nowMs = Date.now();
-                const elapsedSeconds = (nowMs - createdAtMs) / 1000;
-                const averageSecondsPerEmail = elapsedSeconds / processed;
-                const remainingEmails = total - processed;
-                const estimatedSecondsRemaining = averageSecondsPerEmail * remainingEmails;
-                
+                const elapsedSeconds = (Date.now() - createdAtUtc) / 1000;
+                const estimate = (elapsedSeconds / processed) * (total - processed);
                 const etaDisplay = document.getElementById('eta-display');
-                if (etaDisplay) {
-                    etaDisplay.textContent = formatTimeRemaining(estimatedSecondsRemaining);
-                }
+                if (etaDisplay) etaDisplay.textContent = formatTimeRemaining(estimate);
             }
         }
 
+        let pollTimer = null;
         async function poll() {
             try {
-                const resp = await fetch('/api/jobs/' + jobId + '/progress');
+                const resp = await fetch('/api/jobs/' + jobId + '/progress?since=' + cursor);
                 if (!resp.ok) return;
                 const data = await resp.json();
 
                 updateProgress(data.processedEmails, data.status, data.createdAtUtc);
-
-                (data.results ?? []).forEach(appendResult);
-
-                const validCount = (data.results ?? []).filter(r => r.mailboxExists).length;
-                document.getElementById('valid-count').textContent = validCount;
+                (data.results ?? []).forEach(upsertResult);
+                cursor = data.cursor || cursor;
+                document.getElementById('valid-count').textContent = data.validCount;
 
                 if (data.status !== 'Pending' && data.status !== 'Processing') {
                     clearInterval(pollTimer);
@@ -510,7 +517,7 @@
             }
         }
 
-        const pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+        pollTimer = setInterval(poll, POLL_INTERVAL_MS);
         poll(); // immediate first fetch
     })();
     </script>

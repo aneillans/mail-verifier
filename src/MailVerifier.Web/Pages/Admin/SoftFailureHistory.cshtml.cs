@@ -1,13 +1,11 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using MailVerifier.Web.Data;
-using MailVerifier.Web.Security;
+using MailVerifier.Web.Services;
 
 namespace MailVerifier.Web.Pages.Admin;
 
-[Authorize]
 public class SoftFailureHistoryModel : PageModel
 {
     private readonly AppDbContext _db;
@@ -28,14 +26,11 @@ public class SoftFailureHistoryModel : PageModel
 
     public async Task<IActionResult> OnGetAsync()
     {
-        if (!UserAccess.IsAdmin(User))
-            return Forbid();
-
         if (string.IsNullOrWhiteSpace(Q))
             return Page();
 
         Searched = true;
-        var email = Q.Trim().ToLowerInvariant();
+        var email = EmailAddressDeduplicator.Normalize(Q);
 
         Recipient = await _db.SoftFailureRecipients
             .AsNoTracking()

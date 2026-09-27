@@ -20,7 +20,7 @@ public class VerificationJob
     public int ProcessedEmails { get; set; }
 
     [Required]
-    public string Status { get; set; } = "Pending"; // "Pending", "Processing", "Completed", "Failed", "Stopped"
+    public string Status { get; set; } = JobStatus.Pending;
 
     public ICollection<VerificationResult> Results { get; set; } = new List<VerificationResult>();
 

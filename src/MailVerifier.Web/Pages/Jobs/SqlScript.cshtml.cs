@@ -31,32 +31,28 @@ public class JobSqlScriptModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(int id)
     {
-        var query = _db.VerificationJobs
-            .Include(j => j.Results)
-            .Where(j => j.Id == id)
-            .AsQueryable();
-
-        if (!UserAccess.IsAdmin(User))
-        {
-            var userId = UserAccess.GetUserId(User);
-            if (string.IsNullOrWhiteSpace(userId))
-                return NotFound();
-
-            query = query.Where(j => j.UploadedByUser == userId);
-        }
-
-        Job = await query.FirstOrDefaultAsync();
+        Job = await _db.VerificationJobs
+            .AsNoTracking()
+            .AccessibleTo(User)
+            .FirstOrDefaultAsync(j => j.Id == id);
         if (Job == null)
             return NotFound();
 
-        if (Job.Status != "Completed")
+        if (Job.Status != JobStatus.Completed)
         {
             TempData["InfoMessage"] = "SQL generation is only available for completed jobs.";
             return RedirectToPage("/Jobs/Details", new { id });
         }
 
-        EmailRows = Job.Results
+        var results = await _db.VerificationResults
+            .AsNoTracking()
+            .Where(r => r.JobId == id)
             .OrderBy(r => r.EmailAddress)
+            .SelectSummaries()
+            .Select(s => s.Result)
+            .ToListAsync();
+
+        EmailRows = results
             .Select(r => new SqlEmailRow
             {
                 EmailAddress = r.EmailAddress,
