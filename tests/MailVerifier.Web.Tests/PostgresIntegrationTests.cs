@@ -8,6 +8,7 @@ using MailVerifier.Web.Data;
 using MailVerifier.Web.Models;
 using MailVerifier.Web.Services.Verification;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -181,5 +182,22 @@ public class PostgresIntegrationTests(PostgresFixture postgres) : IClassFixture<
         // Health endpoint is anonymous and healthy.
         var health = await factory.CreateClient().GetAsync("/healthz");
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+    }
+
+    [Fact]
+    public async Task Data_protection_keys_are_stored_in_the_database_and_survive_a_restart()
+    {
+        await using var smtp = new FakeSmtpServer();
+
+        string payload;
+        await using (var first = CreateFactory(smtp))
+            payload = first.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("restart-test").Protect("hello");
+
+        await using var second = CreateFactory(smtp);
+        var unprotected = second.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("restart-test").Unprotect(payload);
+        Assert.Equal("hello", unprotected);
+
+        using var scope = second.Services.CreateScope();
+        Assert.True(await scope.ServiceProvider.GetRequiredService<AppDbContext>().DataProtectionKeys.AnyAsync());
     }
 }

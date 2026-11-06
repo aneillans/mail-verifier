@@ -3,6 +3,7 @@ using Exceptionless;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using MailVerifier.Web.Data;
 using MailVerifier.Web.Endpoints;
@@ -55,6 +56,11 @@ builder.Services.AddAuthorizationBuilder()
 // EF Core / PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Keys live in the database so sign-ins and antiforgery tokens survive restarts and redeploys.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AppDbContext>()
+    .SetApplicationName("mail-verifier");
 
 // Verification
 builder.Services.Configure<VerificationOptions>(builder.Configuration.GetSection("Smtp"));

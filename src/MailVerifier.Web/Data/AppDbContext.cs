@@ -1,9 +1,10 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MailVerifier.Web.Models;
 
 namespace MailVerifier.Web.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : DbContext, IDataProtectionKeyContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -13,6 +14,9 @@ public class AppDbContext : DbContext
     public DbSet<SoftFailureRecipient> SoftFailureRecipients => Set<SoftFailureRecipient>();
     public DbSet<SoftFailureEvent> SoftFailureEvents => Set<SoftFailureEvent>();
     public DbSet<SoftFailureUploadBatch> SoftFailureUploadBatches => Set<SoftFailureUploadBatch>();
+
+    // Data Protection keys, shared by every instance so auth cookies and antiforgery tokens survive restarts.
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
