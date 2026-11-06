@@ -5,6 +5,7 @@
 # User files
 **/*.user
 **/.vs/
+.idea/
 
 # Node
 **/node_modules/
@@ -13,5 +14,6 @@
 .DS_Store
 Thumbs.db
 
-# Local compose data
+# Local compose data and secrets
 data/
+.env

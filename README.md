@@ -1,6 +1,10 @@
 # mail-verifier
 Mail Verification Toolkit
 
+## Running with docker compose
+
+Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` and `OIDC_CLIENT_SECRET`. Compose refuses to start until both are set.
+
 ## Verification settings (`Smtp` section)
 
 | Setting | Default | Purpose |
