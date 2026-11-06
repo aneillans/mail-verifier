@@ -10,7 +10,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/src/MailVerifier.Web/bin/Debug/net10.0/MailVerifier.Web.dll",
+            "program": "${workspaceFolder}/src/MailVerifier.Web/bin/Debug/net11.0/MailVerifier.Web.dll",
             "args": [],
             "cwd": "${workspaceFolder}/src/MailVerifier.Web",
             "stopAtEntry": false,

@@ -1,0 +1,49 @@
+name: Build
+run-name: ${{ github.ref_type == 'tag' && format('Build {0}', github.ref_name) || github.event.pull_request.title || github.event.head_commit.message || format('Build {0}', github.ref_name) }}
+
+# Builds and tests, then builds the image. The image is pushed to ProGet for main and v* tags,
+# and built without pushing for pull requests.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & test
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    uses: aneillans/github-templates/.github/workflows/dotnet-ci.yml@v1
+    with:
+      project: mail-verifier.sln
+      global_json_file: global.json
+      verify_format: true
+      audit_vulnerable: true
+      harden_runner: true
+
+  docker:
+    name: Docker image
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: aneillans/github-templates/.github/workflows/docker-build-push.yml@v1
+    with:
+      registry: ${{ vars.PROGET_SERVER }}
+      image_name: docker/mail-verifier
+      push: ${{ github.event_name != 'pull_request' }}
+    secrets:
+      registry_password: ${{ secrets.PROGET_API_KEY }}
