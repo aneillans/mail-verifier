@@ -1,5 +1,6 @@
 **/.git
 **/.vs
+**/.idea
 **/bin
 **/obj
 **/*.user
@@ -7,3 +8,4 @@
 *.md
 .dockerignore
 data
+.env

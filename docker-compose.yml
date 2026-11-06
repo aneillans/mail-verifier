@@ -6,7 +6,7 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-mailverifier}
       - POSTGRES_USER=${POSTGRES_USER:-mailverifier}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -23,10 +23,10 @@ services:
         condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-mailverifier};Username=${POSTGRES_USER:-mailverifier};Password=${POSTGRES_PASSWORD:-change-me}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-mailverifier};Username=${POSTGRES_USER:-mailverifier};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       - OpenIdConnect__Authority=${OIDC_AUTHORITY:-https://auth.neillans.co.uk/realms/MailCheck}
       - OpenIdConnect__ClientId=${OIDC_CLIENT_ID:-mail-verifier}
-      - OpenIdConnect__ClientSecret=${OIDC_CLIENT_SECRET:-your-client-secret}
+      - OpenIdConnect__ClientSecret=${OIDC_CLIENT_SECRET:?OIDC_CLIENT_SECRET must be set}
       - OpenIdConnect__CallbackPath=${OIDC_CALLBACK_PATH:-/signin-oidc}
       - OpenIdConnect__SignedOutCallbackPath=${OIDC_SIGNED_OUT_CALLBACK_PATH:-/signout-callback-oidc}
       - OpenIdConnect__CallbackScheme=${OIDC_CALLBACK_SCHEME:-http}
