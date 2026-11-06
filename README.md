@@ -29,6 +29,11 @@ Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` and `OIDC_CLIENT_SECRE
 
 ```bash
 dotnet test
-# Postgres integration test (uses a disposable database):
-MAILVERIFIER_TEST_PG="Host=localhost;Database=mv_test;Username=...;Password=..." dotnet test
+```
+
+The Postgres integration test starts a `postgres:18-alpine` container through Testcontainers, so it needs Docker or Podman. With rootless Podman, enable the socket and point Testcontainers at it:
+
+```bash
+systemctl --user enable --now podman.socket
+export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
 ```

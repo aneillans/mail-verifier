@@ -15,20 +15,23 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Testcontainers.PostgreSql;
 
 namespace MailVerifier.Web.Tests;
 
-/// <summary>Runs only when MAILVERIFIER_TEST_PG holds a connection string to a disposable Postgres database.</summary>
-public sealed class PostgresFactAttribute : FactAttribute
+/// <summary>Starts a throwaway Postgres container for the test class. Needs a Docker-compatible engine (Docker or Podman).</summary>
+public sealed class PostgresFixture : IAsyncLifetime
 {
-    public PostgresFactAttribute()
-    {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MAILVERIFIER_TEST_PG")))
-            Skip = "Set MAILVERIFIER_TEST_PG to run Postgres integration tests";
-    }
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18-alpine").Build();
+
+    public string ConnectionString => _container.GetConnectionString();
+
+    public Task InitializeAsync() => _container.StartAsync();
+
+    public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 }
 
-public class PostgresIntegrationTests
+public class PostgresIntegrationTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
     private sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
@@ -46,11 +49,11 @@ public class PostgresIntegrationTests
             Task.FromResult(domain == "nomx.test" ? new MxLookupResult(false, []) : new MxLookupResult(true, ["127.0.0.1"]));
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(FakeSmtpServer smtp) =>
+    private WebApplicationFactory<Program> CreateFactory(FakeSmtpServer smtp) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseEnvironment("Development");
-            b.UseSetting("ConnectionStrings:DefaultConnection", Environment.GetEnvironmentVariable("MAILVERIFIER_TEST_PG"));
+            b.UseSetting("ConnectionStrings:DefaultConnection", postgres.ConnectionString);
             b.UseSetting("Smtp:Port", smtp.Port.ToString());
             b.UseSetting("Smtp:CommandTimeoutMs", "3000");
             b.UseSetting("OpenIdConnect:Authority", "https://idp.invalid/realms/test");
@@ -102,7 +105,7 @@ public class PostgresIntegrationTests
         throw new TimeoutException($"Job {jobId} never reached {string.Join("/", statuses)}");
     }
 
-    [PostgresFact]
+    [Fact]
     public async Task Upload_verify_progress_rerun_and_stop()
     {
         await using var smtp = new FakeSmtpServer
